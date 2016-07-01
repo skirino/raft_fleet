@@ -26,7 +26,7 @@ defmodule RaftFleet.MemberAdjusterTest do
     end)
   end
 
-  test "MemberAdjuster.adjust_one_step/2" do
+  test "MemberAdjuster.adjust_one_step/3" do
     with_slaves([:"2", :"3", :"4"], fn ->
       desired_member_nodes = Enum.map([1, 2, 3], &i2node/1)
       [
@@ -51,7 +51,7 @@ defmodule RaftFleet.MemberAdjusterTest do
         end)
         :timer.sleep(500)
 
-        MemberAdjuster.adjust_one_step(@group_name, desired_member_nodes)
+        MemberAdjuster.adjust_one_step([Node.self | Node.list], @group_name, desired_member_nodes)
         :timer.sleep(500)
         assert length(consensus_members) == n_expected
         assert RaftedValue.status({@group_name, i2node(expected_leader_node)})[:state_name] == :leader

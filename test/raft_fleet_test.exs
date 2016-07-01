@@ -1,5 +1,7 @@
 defmodule RaftFleetTest do
   use ExUnit.Case
+  @moduletag timeout: 200_000
+
   import SlaveNode
   alias RaftFleet.MemberSup
 
@@ -8,73 +10,86 @@ defmodule RaftFleetTest do
     :ok
   end
 
+  @n_consensus_groups 100
+  @rv_config          RaftedValue.make_config(RaftFleet.JustAnInt, [election_timeout: 300])
+
   defp zone(node, n) do
     i = Atom.to_string(node) |> String.split("@") |> hd |> String.to_integer |> rem(n)
     "zone#{i}"
   end
 
-  defp activate_nodes(nodes, zone_fun, f) do
+  defp activate_node(node, zone_fun) do
+    :timer.sleep(200) # hack to avoid duplicated leaders
+    assert Supervisor.which_children(MemberSup) |> at(node) == []
+    assert RaftFleet.deactivate                 |> at(node) == {:error, :inactive}
+    assert RaftFleet.activate(zone_fun.(node))  |> at(node) == :ok
+    assert RaftFleet.activate(zone_fun.(node))  |> at(node) == {:error, :activated}
+  end
+
+  defp deactivate_node(node) do
+    %{from: pid} = RaftedValue.status({RaftFleet.Cluster, node})
+    assert Process.alive?(pid)  |> at(node)
+    assert RaftFleet.deactivate |> at(node) == :ok
+    assert RaftFleet.deactivate |> at(node) == {:error, :inactive}
+    :timer.sleep(2000)
+    refute Process.alive?(pid)  |> at(node)
+  end
+
+  defp kill_all_consensus_members_in_local_node do
+    Supervisor.which_children(MemberSup)
+    |> Enum.each(fn {_, pid, _, _} -> :gen_fsm.stop(pid) end)
+  end
+
+  defp with_active_nodes(nodes, zone_fun, f) do
     try do
-      Enum.shuffle(nodes)
-      |> Enum.each(fn n ->
-        :timer.sleep(100) # hack to avoid duplicated leaders
-        assert Supervisor.which_children(MemberSup) |> at(n) == []
-        assert RaftFleet.deactivate                 |> at(n) == {:error, :inactive}
-        assert RaftFleet.activate(zone_fun.(n))     |> at(n) == :ok
-        assert RaftFleet.activate(zone_fun.(n))     |> at(n) == {:error, :activated}
-      end)
+      Enum.shuffle(nodes) |> Enum.each(&activate_node(&1, zone_fun))
       f.()
     after
-      Enum.shuffle(nodes)
-      |> Enum.each(fn n ->
-        %{from: pid} = RaftedValue.status({RaftFleet.Cluster, n})
-        assert Process.alive?(pid)  |> at(n)
-        assert RaftFleet.deactivate |> at(n) == :ok
-        assert RaftFleet.deactivate |> at(n) == {:error, :inactive}
-        :timer.sleep(2000)
-        refute Process.alive?(pid)  |> at(n)
-      end)
-
-      # cleanup children in local node
-      Supervisor.which_children(MemberSup)
-      |> Enum.each(fn {_, pid, _, _} -> :gen_fsm.stop(pid) end)
+      Enum.shuffle(nodes) |> Enum.each(&deactivate_node/1)
+      kill_all_consensus_members_in_local_node
     end
   end
 
   defp start_consensus_group(name) do
-    conf = RaftedValue.make_config(RaftFleet.JustAnInt)
-    {:ok, _} = RaftFleet.add_consensus_group(name, 3, conf)
-    assert RaftFleet.add_consensus_group(name, 3, conf) == {:error, :already_added}
+    {:ok, _} = RaftFleet.add_consensus_group(name, 3, @rv_config)
+    assert RaftFleet.add_consensus_group(name, 3, @rv_config) == {:error, :already_added}
     :timer.sleep(10)
     spawn_link(fn -> client_process_loop(name, 0) end)
   end
 
   defp client_process_loop(name, n) do
-    :timer.sleep(:rand.uniform(100))
+    :timer.sleep(:rand.uniform(1000))
     assert RaftFleet.command(name, :inc) == {:ok, n}
     client_process_loop(name, n + 1)
   end
 
-  defp count_consensus_group_members(nodes) do
-    Enum.map(nodes, fn n ->
-      length(Supervisor.which_children({MemberSup, n}))
+  defp assert_members_well_distributed(n_groups) do
+    {:ok, {participating_nodes, _, _}} = RaftFleet.query(RaftFleet.Cluster, {:consensus_groups, Node.self})
+    members = Enum.map(participating_nodes, fn n -> length(Supervisor.which_children({MemberSup, n})) end)
+    expected_total = min(3, length(participating_nodes)) * n_groups
+    assert Enum.sum(members) == expected_total
+    average = div(expected_total, length(participating_nodes))
+    assert Enum.min(members) >= div(average, 2)
+    assert Enum.max(members) <= average * 2
+
+    ([Node.self | Node.list] -- participating_nodes)
+    |> Enum.each(fn n ->
+      assert Supervisor.which_children({MemberSup, n}) == []
     end)
-    |> Enum.sum
   end
 
-  defp with_consensus_groups_and_their_clients(nodes, n_groups, f) do
-    assert count_consensus_group_members(nodes) == 0 # with no consensus group there should be no RaftedValue.Server processes
+  defp with_consensus_groups_and_their_clients(f) do
+    assert_members_well_distributed(0) # with no consensus group there should be no RaftedValue.Server process
     assert RaftFleet.command(:nonexisting_consensus_group, :inc) == {:error, :no_leader}
     assert RaftFleet.query(:nonexisting_consensus_group, :get)   == {:error, :no_leader}
 
     # add consensus groups (at first only leaders are spawned)
-    consensus_names = Enum.map(1 .. n_groups, fn i -> :"consensus_group#{i}" end)
+    consensus_names = Enum.map(1 .. @n_consensus_groups, fn i -> :"consensus_group#{i}" end)
     client_pids     = Enum.map(consensus_names, &start_consensus_group/1)
 
     # follower processes should automatically be spawned afterwards
-    :timer.sleep(2100)
-    expected_n_processes = min(3, length(nodes)) * length(consensus_names)
-    assert count_consensus_group_members(nodes) == expected_n_processes
+    :timer.sleep(3_100)
+    assert_members_well_distributed(@n_consensus_groups)
 
     f.()
 
@@ -89,19 +104,50 @@ defmodule RaftFleetTest do
     end)
 
     # processes should be cleaned-up
-    :timer.sleep(1100)
-    assert count_consensus_group_members(nodes) == 0
+    :timer.sleep(2100)
+    assert_members_well_distributed(0)
   end
 
   defp run_basic_setup_test(node_names, zone_fun) do
     with_slaves(node_names, fn ->
-      all_nodes = [Node.self | Node.list]
-      activate_nodes(all_nodes, zone_fun, fn ->
-        with_consensus_groups_and_their_clients(all_nodes, 100, fn ->
+      with_active_nodes([Node.self | Node.list], zone_fun, fn ->
+        with_consensus_groups_and_their_clients(fn ->
           :ok
         end)
       end)
     end)
+  end
+
+  defp run_node_addition_and_removal_test(node_names1, node_names2, zone_fun) do
+    Enum.each(node_names1, &start_slave/1)
+    nodes1 = [Node.self | Node.list]
+    Enum.each(nodes1, &activate_node(&1, zone_fun))
+
+    with_consensus_groups_and_their_clients(fn ->
+      Enum.each(node_names2, &start_slave/1)
+      nodes2 = [Node.self | Node.list] -- nodes1
+      Enum.each(nodes2, &activate_node(&1, zone_fun))
+
+      # after several adjustments consensus members should be re-distributed
+      :timer.sleep(15_100)
+      assert_members_well_distributed(@n_consensus_groups)
+
+      # deactivate/remove nodes one by one; client should be able to interact with consensus leaders
+      Enum.each(nodes1, fn n ->
+        deactivate_node(n)
+        :timer.sleep(4_100)
+        assert_members_well_distributed(@n_consensus_groups)
+      end)
+    end)
+
+    Enum.each(Node.list -- nodes1, &deactivate_node/1)
+    Enum.each(node_names1 ++ node_names2, &stop_slave/1)
+    kill_all_consensus_members_in_local_node
+  end
+
+  defp run_node_failure_test(node_names, zone_fun) do
+    # failing node is purged from cluster state
+    # all consensus groups: unhealthy members become empty
   end
 
   cluster_node_zone_configurations = [
@@ -118,6 +164,15 @@ defmodule RaftFleetTest do
     slave_shortnames = Enum.map(1 .. n_nodes, fn i -> :"#{i}" end) |> tl
     test "startup/shutdown of statically defined nodes: #{n_nodes} node in #{n_zones} zone" do
       run_basic_setup_test(unquote(slave_shortnames), &zone(&1, unquote(n_zones)))
+    end
+  end)
+
+  Enum.filter(cluster_node_zone_configurations, fn {n_nodes, _} -> n_nodes > 1 end) # more than 2 nodes should be present
+  |> Enum.each(fn {n_nodes, n_zones} ->
+    slaves1 = Enum.map(          1 ..     n_nodes, fn i -> :"#{i}" end) |> tl
+    slaves2 = Enum.map(n_nodes + 1 .. 2 * n_nodes, fn i -> :"#{i}" end)
+    test "dynamically adding/removing node should invoke rebalancing of consensus members: #{n_nodes} => #{2 * n_nodes} => #{n_nodes} in #{n_zones} zone" do
+      run_node_addition_and_removal_test(unquote(slaves1), unquote(slaves2), &zone(&1, unquote(n_zones)))
     end
   end)
 end

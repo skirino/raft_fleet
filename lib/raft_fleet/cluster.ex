@@ -137,9 +137,10 @@ defmodule RaftFleet.Cluster do
   end
 
   defun query(data :: t, arg :: Data.query_arg) :: Data.query_ret do
-    (%State{members_per_leader_node: members, recently_removed_consensus_names: removed}, {:consensus_groups, node}) ->
+    (%State{nodes_per_zone: nodes, members_per_leader_node: members, recently_removed_consensus_names: removed}, {:consensus_groups, node}) ->
+      participating_nodes = Map.values(nodes) |> List.flatten
       groups_led_by_the_node = Map.get(members,node, [])
-      {groups_led_by_the_node, CappedQueue.underlying_queue(removed)}
+      {participating_nodes, groups_led_by_the_node, CappedQueue.underlying_queue(removed)}
   end
 
   defun rv_config :: RaftedValue.Config.t do

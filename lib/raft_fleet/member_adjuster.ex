@@ -5,12 +5,13 @@ defmodule RaftFleet.MemberAdjuster do
 
   def adjust do
     case RaftFleet.query(Cluster, {:consensus_groups, Node.self}) do
-      {:error, _}                           -> :ok
-      {:ok, {groups, removed_groups_queue}} ->
+      {:error, _} ->
+        :ok # ignore error, just retry at the next time
+      {:ok, {participating_nodes, groups, removed_groups_queue}} ->
         {removed1, removed2} = removed_groups_queue
         Enum.each(removed1, &brutally_kill/1)
         Enum.each(removed2, &brutally_kill/1)
-        Enum.each(groups, &do_adjust/1)
+        Enum.each(groups, &do_adjust(participating_nodes, &1))
     end
   end
 
@@ -21,10 +22,12 @@ defmodule RaftFleet.MemberAdjuster do
     end
   end
 
-  defp do_adjust({_, []}), do: :ok
-  defp do_adjust({group_name, nodes}), do: adjust_one_step(group_name, nodes)
+  defp do_adjust(_, {_, []}), do: :ok
+  defp do_adjust(participating_nodes, {group_name, desired_member_nodes}) do
+    adjust_one_step(participating_nodes, group_name, desired_member_nodes)
+  end
 
-  defpt adjust_one_step(group_name, [leader_node | follower_nodes] = all_nodes) do
+  defpt adjust_one_step(participating_nodes, group_name, [leader_node | follower_nodes] = desired_member_nodes) do
     case try_status({group_name, leader_node}) do
       %{state_name: :leader, members: members} ->
         follower_nodes_from_leader = Enum.map(members, &node/1) |> List.delete(leader_node) |> Enum.sort
@@ -37,16 +40,15 @@ defmodule RaftFleet.MemberAdjuster do
         end
       status_or_nil ->
         pairs0 =
-          [Node.self | Node.list]
-          |> List.delete(leader_node)
+          List.delete(participating_nodes, leader_node)
           |> Enum.map(fn n -> {n, try_status({group_name, n})} end)
           |> Enum.reject(&match?({_, nil}, &1))
         pairs = if status_or_nil, do: [{leader_node, status_or_nil} | pairs0], else: pairs0
         nodes_with_living_members = Enum.reject(pairs, &match?({_, nil}, &1)) |> Enum.map(fn {n, _} -> n end)
         cond do
-          (nodes_to_be_added = all_nodes -- nodes_with_living_members) != [] ->
+          (nodes_to_be_added = desired_member_nodes -- nodes_with_living_members) != [] ->
             MemberSup.start_consensus_group_follower(group_name, Enum.random(nodes_to_be_added))
-          undesired_leader = find_undesired_leader(pairs0) ->
+          undesired_leader = find_undesired_leader(pairs0, group_name) ->
             RaftedValue.replace_leader(undesired_leader, Process.whereis(group_name))
           true -> :ok
         end
@@ -61,8 +63,26 @@ defmodule RaftFleet.MemberAdjuster do
     end
   end
 
-  defp find_undesired_leader(pairs) do
+  defp find_undesired_leader(pairs, group_name) do
     statuses = Enum.map(pairs, fn {_, s} -> s end)
+    case find_leader_from_statuses(statuses) do
+      nil ->
+        # No leader found in participating nodes.
+        # However there may be a leader in already-deactivated nodes; try them
+        statuses_not_participating =
+          (Node.list -- Enum.map(pairs, fn {n, _} -> n end))
+          |> Enum.map(fn n -> try_status({group_name, n}) end)
+          |> Enum.reject(&is_nil/1)
+        if Enum.empty?(statuses_not_participating) do
+          nil
+        else
+          find_leader_from_statuses(statuses_not_participating ++ statuses) # use all statuses in order to exclude stale leader
+        end
+      pid -> pid
+    end
+  end
+
+  defp find_leader_from_statuses(statuses) do
     statuses_by_term = Enum.group_by(statuses, fn %{current_term: t} -> t end)
     latest_term = Map.keys(statuses_by_term) |> Enum.max
     statuses_by_term[latest_term]
