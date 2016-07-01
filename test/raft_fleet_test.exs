@@ -65,17 +65,28 @@ defmodule RaftFleetTest do
 
   defp assert_members_well_distributed(n_groups) do
     {:ok, {participating_nodes, _, _}} = RaftFleet.query(RaftFleet.Cluster, {:consensus_groups, Node.self})
-    members = Enum.map(participating_nodes, fn n -> length(Supervisor.which_children({MemberSup, n})) end)
+    {members, leaders} =
+      Enum.map(participating_nodes, fn n ->
+        children = Supervisor.which_children({MemberSup, n})
+        n_leaders = Enum.count(children, fn {_, pid, _, _} -> RaftedValue.status(pid)[:state_name] == :leader end)
+        {length(children), n_leaders}
+      end)
+      |> Enum.unzip
     expected_total = min(3, length(participating_nodes)) * n_groups
-    assert Enum.sum(members) == expected_total
-    average = div(expected_total, length(participating_nodes))
-    assert Enum.min(members) >= div(average, 2)
-    assert Enum.max(members) <= average * 2
+    assert_flat_distribution(members, expected_total)
+    assert_flat_distribution(leaders, n_groups)
 
     ([Node.self | Node.list] -- participating_nodes)
     |> Enum.each(fn n ->
       assert Supervisor.which_children({MemberSup, n}) == []
     end)
+  end
+
+  defp assert_flat_distribution(list, total) do
+    assert Enum.sum(list) == total
+    average = div(total, length(list))
+    assert Enum.min(list) >= div(average, 3)
+    assert Enum.max(list) <= average * 3
   end
 
   defp with_consensus_groups_and_their_clients(f) do
