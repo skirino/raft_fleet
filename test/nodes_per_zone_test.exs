@@ -33,22 +33,34 @@ defmodule RaftFleet.NodesPerZoneTest do
     nodes2 = %{"zone1" => [:a, :b, :c], "zone2" => [:d, :e, :f]}
     assert NodesPerZone.lrw_members(nodes2, :cg_name, 1) == [:d]
     assert NodesPerZone.lrw_members(nodes2, :cg_name, 2) == [:d, :c]
-    assert NodesPerZone.lrw_members(nodes2, :cg_name, 3) == [:d, :f, :c]
-    assert NodesPerZone.lrw_members(nodes2, :cg_name, 4) == [:d, :f, :c, :b]
-    assert NodesPerZone.lrw_members(nodes2, :cg_name, 5) == [:d, :f, :e, :c, :b]
-    assert NodesPerZone.lrw_members(nodes2, :cg_name, 6) == [:d, :f, :e, :c, :b, :a]
-    assert NodesPerZone.lrw_members(nodes2, :cg_name, 7) == [:d, :f, :e, :c, :b, :a]
+    assert NodesPerZone.lrw_members(nodes2, :cg_name, 3) == [:d, :c, :b]
+    assert NodesPerZone.lrw_members(nodes2, :cg_name, 4) == [:d, :c, :b, :f]
+    assert NodesPerZone.lrw_members(nodes2, :cg_name, 5) == [:d, :c, :b, :f, :a]
+    assert NodesPerZone.lrw_members(nodes2, :cg_name, 6) == [:d, :c, :b, :f, :a, :e]
+    assert NodesPerZone.lrw_members(nodes2, :cg_name, 7) == [:d, :c, :b, :f, :a, :e]
 
     nodes3 = %{"zone1" => [:a, :b, :c], "zone2" => [:d, :e, :f], "zone3" => [:g, :h, :i]}
-    assert NodesPerZone.lrw_members(nodes3, :cg_name,  1) == [:g]
-    assert NodesPerZone.lrw_members(nodes3, :cg_name,  2) == [:g, :d]
-    assert NodesPerZone.lrw_members(nodes3, :cg_name,  3) == [:g, :d, :c]
-    assert NodesPerZone.lrw_members(nodes3, :cg_name,  4) == [:g, :i, :d, :c]
-    assert NodesPerZone.lrw_members(nodes3, :cg_name,  5) == [:g, :i, :d, :f, :c]
-    assert NodesPerZone.lrw_members(nodes3, :cg_name,  6) == [:g, :i, :d, :f, :c, :b]
-    assert NodesPerZone.lrw_members(nodes3, :cg_name,  7) == [:g, :i, :h, :d, :f, :c, :b]
-    assert NodesPerZone.lrw_members(nodes3, :cg_name,  8) == [:g, :i, :h, :d, :f, :e, :c, :b]
-    assert NodesPerZone.lrw_members(nodes3, :cg_name,  9) == [:g, :i, :h, :d, :f, :e, :c, :b, :a]
-    assert NodesPerZone.lrw_members(nodes3, :cg_name, 10) == [:g, :i, :h, :d, :f, :e, :c, :b, :a]
+    assert NodesPerZone.lrw_members(nodes3, :cg_name,  1) == [:d]
+    assert NodesPerZone.lrw_members(nodes3, :cg_name,  2) == [:d, :g]
+    assert NodesPerZone.lrw_members(nodes3, :cg_name,  3) == [:d, :g, :c]
+    assert NodesPerZone.lrw_members(nodes3, :cg_name,  4) == [:d, :g, :c, :b]
+    assert NodesPerZone.lrw_members(nodes3, :cg_name,  5) == [:d, :g, :c, :b, :f]
+    assert NodesPerZone.lrw_members(nodes3, :cg_name,  6) == [:d, :g, :c, :b, :f, :i]
+    assert NodesPerZone.lrw_members(nodes3, :cg_name,  7) == [:d, :g, :c, :b, :f, :i, :a]
+    assert NodesPerZone.lrw_members(nodes3, :cg_name,  8) == [:d, :g, :c, :b, :f, :i, :a, :h]
+    assert NodesPerZone.lrw_members(nodes3, :cg_name,  9) == [:d, :g, :c, :b, :f, :i, :a, :h, :e]
+    assert NodesPerZone.lrw_members(nodes3, :cg_name, 10) == [:d, :g, :c, :b, :f, :i, :a, :h, :e]
+
+    nodes4 = %{"zone1" => [:a, :b], "zone2" => [:c]}
+    assert NodesPerZone.lrw_members(nodes4, :cg_name, 1) == [:c]
+    assert NodesPerZone.lrw_members(nodes4, :cg_name, 2) == [:c, :b]
+    assert NodesPerZone.lrw_members(nodes4, :cg_name, 3) == [:c, :b, :a]
+    assert NodesPerZone.lrw_members(nodes4, :cg_name, 4) == [:c, :b, :a]
+
+    nodes5 = %{"zone1" => [:a], "zone2" => [:b, :c]}
+    assert NodesPerZone.lrw_members(nodes5, :cg_name, 1) == [:c]
+    assert NodesPerZone.lrw_members(nodes5, :cg_name, 2) == [:c, :a]
+    assert NodesPerZone.lrw_members(nodes5, :cg_name, 3) == [:c, :a, :b]
+    assert NodesPerZone.lrw_members(nodes5, :cg_name, 4) == [:c, :a, :b]
   end
 end
