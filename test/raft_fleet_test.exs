@@ -67,8 +67,10 @@ defmodule RaftFleetTest do
     {:ok, {participating_nodes, _, _}} = RaftFleet.query(RaftFleet.Cluster, {:consensus_groups, Node.self})
     {members, leaders} =
       Enum.map(participating_nodes, fn n ->
-        children = Supervisor.which_children({MemberSup, n})
-        n_leaders = Enum.count(children, fn {_, pid, _, _} -> RaftedValue.status(pid)[:state_name] == :leader end)
+        children = Supervisor.which_children({MemberSup, n}) # should not exit; all participating nodes should be alive
+        statuses = Enum.map(children, fn {_, pid, _, _} -> RaftedValue.status(pid) end)
+        assert Enum.all?(statuses, &Enum.empty?(&1[:unresponsive_followers]))
+        n_leaders = Enum.count(statuses, &(&1[:state_name] == :leader))
         {length(children), n_leaders}
       end)
       |> Enum.unzip
@@ -156,9 +158,25 @@ defmodule RaftFleetTest do
     kill_all_consensus_members_in_local_node
   end
 
-  defp run_node_failure_test(node_names, zone_fun) do
-    # failing node is purged from cluster state
-    # all consensus groups: unhealthy members become empty
+  defp run_node_failure_test(node_names, node_to_fail, zone_fun) do
+    Enum.each(node_names, &start_slave/1)
+    nodes = [Node.self | Node.list]
+    Enum.each(nodes, &activate_node(&1, zone_fun))
+
+    with_consensus_groups_and_their_clients(fn ->
+      stop_slave(node_to_fail)
+      :timer.sleep(20_100)
+      assert_members_well_distributed(@n_consensus_groups)
+
+      status = RaftedValue.status(RaftFleet.Cluster)
+      assert status[:state_name] == :leader
+      assert length(status[:members]) == length(Node.list) + 1
+      assert Enum.all?(status[:members], fn pid -> node(pid) != node_to_fail end)
+    end)
+
+    Enum.each([Node.self | Node.list], &deactivate_node/1)
+    Enum.each(node_names -- [node_to_fail], &stop_slave/1)
+    kill_all_consensus_members_in_local_node
   end
 
   cluster_node_zone_configurations = [
@@ -172,18 +190,27 @@ defmodule RaftFleetTest do
   ]
 
   Enum.each(cluster_node_zone_configurations, fn {n_nodes, n_zones} ->
-    slave_shortnames = Enum.map(1 .. n_nodes, fn i -> :"#{i}" end) |> tl
-    test "startup/shutdown of statically defined nodes: #{n_nodes} node in #{n_zones} zone" do
-      run_basic_setup_test(unquote(slave_shortnames), &zone(&1, unquote(n_zones)))
+    slaves = Enum.map(1 .. n_nodes, fn i -> :"#{i}" end) |> tl
+    test "startup/shutdown of statically defined nodes: #{n_nodes} node(s) in #{n_zones} zone(s)" do
+      run_basic_setup_test(unquote(slaves), &zone(&1, unquote(n_zones)))
     end
   end)
 
-  Enum.filter(cluster_node_zone_configurations, fn {n_nodes, _} -> n_nodes > 1 end) # more than 2 nodes should be present
+  Enum.filter(cluster_node_zone_configurations, fn {n_nodes, _} -> n_nodes >= 2 end) # at least 2 nodes are necessary
   |> Enum.each(fn {n_nodes, n_zones} ->
     slaves1 = Enum.map(          1 ..     n_nodes, fn i -> :"#{i}" end) |> tl
     slaves2 = Enum.map(n_nodes + 1 .. 2 * n_nodes, fn i -> :"#{i}" end)
-    test "dynamically adding/removing node should invoke rebalancing of consensus members: #{n_nodes} => #{2 * n_nodes} => #{n_nodes} in #{n_zones} zone" do
+    test "dynamically adding/removing node should invoke rebalancing of consensus members: #{n_nodes} => #{2 * n_nodes} => #{n_nodes} in #{n_zones} zone(s)" do
       run_node_addition_and_removal_test(unquote(slaves1), unquote(slaves2), &zone(&1, unquote(n_zones)))
+    end
+  end)
+
+  Enum.filter(cluster_node_zone_configurations, fn {n_nodes, _} -> n_nodes >= 3 end) # at least 2 nodes are necessary after 1 node failure
+  |> Enum.each(fn {n_nodes, n_zones} ->
+    slaves = Enum.map(1 .. n_nodes, fn i -> :"#{i}" end) |> tl
+    slave_that_fails = List.last(slaves)
+    test "node failure should invoke purging of the node and rebalancing of consensus members: #{n_nodes} nodes in #{n_zones} zone(s)" do
+      run_node_failure_test(unquote(slaves), unquote(slave_that_fails), &zone(&1, unquote(n_zones)))
     end
   end)
 end

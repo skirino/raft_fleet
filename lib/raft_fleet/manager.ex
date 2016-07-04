@@ -3,12 +3,13 @@ alias Croma.TypeGen, as: TG
 
 defmodule RaftFleet.Manager do
   use GenServer
-  alias RaftFleet.{Cluster, MemberAdjuster, LeaderPidCache, Config}
+  alias RaftFleet.{Cluster, MemberSup, MemberAdjuster, LeaderPidCache, Config}
 
   defmodule State do
     use Croma.Struct, fields: [
-      timer:  TG.nilable(Croma.Reference),
-      worker: TG.nilable(Croma.Pid),
+      timer:            TG.nilable(Croma.Reference),
+      worker:           TG.nilable(Croma.Pid),
+      purge_wait_timer: TG.nilable(Croma.Reference),
     ]
   end
 
@@ -40,10 +41,30 @@ defmodule RaftFleet.Manager do
       {:reply, {:error, :inactive}, state}
     end
   end
+  def handle_call({:start_consensus_group_leader, name, rv_config}, _from, state) do
+    ret = Supervisor.start_child(MemberSup, [{:create_new_consensus_group, rv_config}, name])
+    {:reply, ret, state}
+  end
   def handle_call(msg, _from, state) do
     {:reply, msg, state}
   end
 
+  def handle_cast({:node_purge_candidate_changed, node_to_purge}, %State{purge_wait_timer: ref1} = state) do
+    if ref1, do: Process.cancel_timer(ref1)
+    ref2 =
+      if node_to_purge do
+        Process.send_after(self, {:purge_node, node_to_purge}, Config.node_purge_failure_time_window)
+      else
+        nil
+      end
+    new_state = %State{state | purge_wait_timer: ref2}
+    {:noreply, new_state}
+  end
+  def handle_cast({:start_consensus_group_follower, name}, state) do
+    other_node_members = Enum.map(Node.list, fn n -> {name, n} end)
+    Supervisor.start_child(MemberSup, [{:join_existing_consensus_group, other_node_members}, name])
+    {:noreply, state}
+  end
   def handle_cast(_msg, state) do
     {:noreply, state}
   end
@@ -64,6 +85,15 @@ defmodule RaftFleet.Manager do
   end
   def handle_info({:DOWN, _ref, :process, _pid, _info}, state) do
     {:noreply, %State{state | worker: nil}}
+  end
+  def handle_info({:purge_node, node}, state) do
+    %{state_name: state_name, members: members} = RaftedValue.status(Cluster)
+    if state_name == :leader do
+      RaftedValue.command(Cluster, {:remove_node, node})
+      target_pid = Enum.find(members, fn pid -> node(pid) == node end)
+      RaftedValue.remove_follower(Cluster, target_pid)
+    end
+    {:noreply, %State{state | purge_wait_timer: nil}}
   end
   def handle_info(_msg, state) do
     {:noreply, state}
@@ -95,5 +125,17 @@ defmodule RaftFleet.Manager do
     end
     :ok = Supervisor.terminate_child(RaftFleet.Supervisor, Cluster.Server)
     :ok = Supervisor.delete_child(RaftFleet.Supervisor, Cluster.Server)
+  end
+
+  defun node_purge_candidate_changed(node_to_purge :: node) :: :ok do
+    GenServer.cast(__MODULE__, {:node_purge_candidate_changed, node_to_purge})
+  end
+
+  defun start_consensus_group_leader(name :: atom, node :: node, rv_config :: RaftedValue.Config.t) :: Supervisor.on_start_child do
+    GenServer.call({__MODULE__, node}, {:start_consensus_group_leader, name, rv_config})
+  end
+
+  defun start_consensus_group_follower(name :: atom, node :: node) :: :ok do
+    GenServer.cast({__MODULE__, node}, {:start_consensus_group_follower, name})
   end
 end

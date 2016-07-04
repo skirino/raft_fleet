@@ -1,7 +1,7 @@
 defmodule RaftFleet.MemberAdjusterTest do
   use Croma.TestCase
   import SlaveNode
-  alias RaftFleet.MemberSup
+  alias RaftFleet.{Manager, MemberSup}
 
   setup_all do
     Node.start(:"1", :shortnames)
@@ -44,10 +44,10 @@ defmodule RaftFleet.MemberAdjusterTest do
         {[4, 1, 2, 3], 4, 1},
       ]
       |> Enum.each(fn {[leader_node | follower_nodes], n_expected, expected_leader_node} ->
-        {:ok, _} = MemberSup.start_consensus_group_leader(@group_name, i2node(leader_node), @rv_config)
+        {:ok, _} = Manager.start_consensus_group_leader(@group_name, i2node(leader_node), @rv_config)
         Enum.each(follower_nodes, fn n ->
           :timer.sleep(100)
-          {:ok, _} = MemberSup.start_consensus_group_follower(@group_name, i2node(n))
+          Manager.start_consensus_group_follower(@group_name, i2node(n))
         end)
         :timer.sleep(500)
 
@@ -57,9 +57,7 @@ defmodule RaftFleet.MemberAdjusterTest do
         assert RaftedValue.status({@group_name, i2node(expected_leader_node)})[:state_name] == :leader
 
         [Node.self | Node.list]
-        |> Enum.flat_map(fn n ->
-          Supervisor.which_children(RaftFleet.MemberSup) |> at(n)
-        end)
+        |> Enum.flat_map(fn n -> Supervisor.which_children({MemberSup, n}) end)
         |> Enum.each(fn {_, pid, _, _} -> Process.exit(pid, :kill) end)
       end)
     end)

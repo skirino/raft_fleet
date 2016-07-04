@@ -22,14 +22,14 @@ defmodule RaftFleet do
   defun command(name        :: g[atom],
                 command_arg :: Data.command_arg) :: {:ok, Data.command_ret} | {:error, :no_leader} do
     ref = make_ref
-    call_with_retry(name, 2, fn pid ->
+    call_with_retry(name, 3, fn pid ->
       RaftedValue.command(pid, command_arg, 500, ref)
     end)
   end
 
   defun query(name      :: g[atom],
               query_arg :: Data.query_arg) :: {:ok, Data.query_ret} | {:error, :no_leader} do
-    call_with_retry(name, 2, fn pid ->
+    call_with_retry(name, 3, fn pid ->
       RaftedValue.query(pid, query_arg, 500)
     end)
   end
@@ -107,14 +107,14 @@ defmodule RaftFleet do
     GenServer.call(Manager, :deactivate)
   end
 
-  defun add_consensus_group(group_name :: ConsensusGroupName.t,
+  defun add_consensus_group(group_name :: g[atom],
                             n_replica  :: g[pos_integer],
                             config     :: RaftedValue.Config.t) :: {:ok, [node]} | {:error, :already_added} do
     {:ok, ret} = RaftFleet.command(RaftFleet.Cluster, {:add_group, group_name, n_replica, config})
     ret
   end
 
-  defun remove_consensus_group(group_name :: ConsensusGroupName.t) :: :ok | {:error, :not_found} do
+  defun remove_consensus_group(group_name :: g[atom]) :: :ok | {:error, :not_found} do
     {:ok, ret} = RaftFleet.command(RaftFleet.Cluster, {:remove_group, group_name})
     ret
   end

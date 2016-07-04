@@ -15,19 +15,12 @@ defmodule RaftFleet.ZoneId do
   def validate(t), do: {:ok, t}
 end
 
-defmodule RaftFleet.ConsensusGroupName do
-  @type t :: any
-  def validate(t), do: {:ok, t}
-end
-
 defmodule RaftFleet.ConsensusGroups do
-  alias RaftFleet.ConsensusGroupName
-  use Croma.SubtypeOfMap, key_module: ConsensusGroupName, value_module: Croma.PosInteger
+  use Croma.SubtypeOfMap, key_module: Croma.Atom, value_module: Croma.PosInteger
 end
 
 defmodule RaftFleet.ConsensusNodesPair do
-  alias RaftFleet.ConsensusGroupName
-  use Croma.SubtypeOfTuple, elem_modules: [ConsensusGroupName, TG.list_of(Croma.Atom)]
+  use Croma.SubtypeOfTuple, elem_modules: [Croma.Atom, TG.list_of(Croma.Atom)]
 end
 
 defmodule RaftFleet.MembersPerLeaderNode do
@@ -35,22 +28,30 @@ defmodule RaftFleet.MembersPerLeaderNode do
   use Croma.SubtypeOfMap, key_module: Croma.Atom, value_module: TG.list_of(ConsensusNodesPair)
 end
 
-defmodule RaftFleet.UnhealthyRaftMembers do
-  use Croma.SubtypeOfMap, key_module: Croma.Atom, value_module: RaftedValue.PidSet
+defmodule RaftFleet.UnhealthyMembersCounts do
+  use Croma.SubtypeOfMap, key_module: Croma.Atom, value_module: Croma.NonNegInteger
 end
 
-defmodule RaftFleet.Config do
-  @default_balancing_interval (if Mix.env == :test, do: 1_000, else: 300_000) # `Mix.env` must be evaluated during compilation
-  defun balancing_interval :: pos_integer do
-    Application.get_env(:raft_fleet, :balancing_interval, @default_balancing_interval)
+defmodule RaftFleet.UnhealthyMembersCountsMap do
+  use Croma.SubtypeOfMap, key_module: Croma.Atom, value_module: RaftFleet.UnhealthyMembersCounts
+
+  defun remove_node(umcm :: t, n :: node) :: t do
+    Map.delete(umcm, n)
+    |> Enum.into(%{}, fn {node, counts} -> {node, Map.delete(counts, n)} end)
   end
 
-  defun node_purge_threshold_failing_members :: pos_integer do
-    Application.get_env(:raft_fleet, :node_purge_threshold_failing_members, 3)
-  end
-
-  defun node_purge_failure_time_window :: pos_integer do
-    Application.get_env(:raft_fleet, :node_purge_failure_time_window, 300_000)
+  defun most_unhealthy_node(m :: t, threshold :: non_neg_integer) :: nil | node do
+    Map.values(m)
+    |> Enum.reduce(%{}, fn(map, acc) ->
+      Map.merge(map, acc, fn(_k, v1, v2) -> v1 + v2 end)
+    end)
+    |> Enum.filter(fn {_node, count} -> threshold < count end)
+    |> Enum.sort_by(fn {node, count} -> {count, node} end, &>=/2) # use order of `node` to break ties
+    |> List.first
+    |> case do
+      {node, _count} -> node
+      nil            -> nil
+    end
   end
 end
 
