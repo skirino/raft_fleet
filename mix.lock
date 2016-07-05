@@ -12,5 +12,5 @@
   "metrics": {:hex, :metrics, "1.0.1", "25f094dea2cda98213cecc3aeff09e940299d950904393b2a29d191c346a8486", [:rebar3], []},
   "mimerl": {:hex, :mimerl, "1.0.2", "993f9b0e084083405ed8252b99460c4f0563e41729ab42d9074fd5e52439be88", [:rebar3], []},
   "poison": {:hex, :poison, "2.1.0", "f583218ced822675e484648fa26c933d621373f01c6c76bd00005d7bd4b82e27", [:mix], []},
-  "rafted_value": {:hex, :rafted_value, "0.1.1", "d0d55217459f46155da1461340a49d3b65cbb670e62ff19748e387cc153a87e5", [:mix], [{:croma, "~> 0.4", [hex: :croma, optional: false]}]},
+  "rafted_value": {:hex, :rafted_value, "0.1.2", "12b7241ecb1526bd3ebb9f392ba3b9684225e511d408e7f17e6ec47d96b88de0", [:mix], [{:croma, "~> 0.4", [hex: :croma, optional: false]}]},
   "ssl_verify_fun": {:hex, :ssl_verify_fun, "1.1.0", "edee20847c42e379bf91261db474ffbe373f8acb56e9079acb6038d4e0bf414f", [:rebar, :make], []}}

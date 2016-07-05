@@ -109,9 +109,12 @@ defmodule RaftFleet do
 
   defun add_consensus_group(group_name :: g[atom],
                             n_replica  :: g[pos_integer],
-                            config     :: RaftedValue.Config.t) :: {:ok, [node]} | {:error, :already_added} do
+                            config     :: RaftedValue.Config.t) :: :ok | {:error, :already_added} do
     {:ok, ret} = RaftFleet.command(RaftFleet.Cluster, {:add_group, group_name, n_replica, config})
-    ret
+    case ret do
+      {:ok, _nodes} -> :ok
+      error         -> error
+    end
   end
 
   defun remove_consensus_group(group_name :: g[atom]) :: :ok | {:error, :not_found} do

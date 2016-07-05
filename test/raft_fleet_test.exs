@@ -51,7 +51,7 @@ defmodule RaftFleetTest do
   end
 
   defp start_consensus_group(name) do
-    {:ok, _} = RaftFleet.add_consensus_group(name, 3, @rv_config)
+    assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
     assert RaftFleet.add_consensus_group(name, 3, @rv_config) == {:error, :already_added}
     :timer.sleep(10)
     spawn_link(fn -> client_process_loop(name, 0) end)

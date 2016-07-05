@@ -35,47 +35,23 @@ defmodule RaftFleet.Cluster do
       node_to_purge:                    TG.nilable(Croma.Atom),    # node that has too many unhealthy raft members
     ]
 
-    def add_node(%__MODULE__{nodes_per_zone: nodes, consensus_groups: groups} = state, n, z) do
-      new_nodes  = Map.update(nodes, z, [n], &[n | &1])
-      %__MODULE__{state | nodes_per_zone: new_nodes, members_per_leader_node: compute_members(new_nodes, groups)}
-    end
-
-    def remove_node(%__MODULE__{nodes_per_zone: nodes, consensus_groups: groups, unhealthy_members_map: umm, node_to_purge: node_to_purge} = state, n) do
-      new_nodes =
-        Enum.reduce(nodes, %{}, fn({z, ns}, m) ->
-          case ns do
-            [^n] -> m
-            _    -> Map.put(m, z, List.delete(ns, n))
-          end
-        end)
-      new_members       = compute_members(new_nodes, groups)
-      new_umm           = UnhealthyMembersCountsMap.remove_node(umm, n)
-      new_node_to_purge = if node_to_purge == n, do: nil, else: node_to_purge
-      %__MODULE__{state | nodes_per_zone: new_nodes, members_per_leader_node: new_members, unhealthy_members_map: new_umm, node_to_purge: new_node_to_purge}
-    end
-
-    defp compute_members(nodes, groups) do
-      if map_size(nodes) == 0 do
-        %{}
-      else
-        Enum.map(groups, fn {group, n_replica} -> {group, NodesPerZone.lrw_members(nodes, group, n_replica)} end)
-        |> Enum.group_by(fn {_, members} -> hd(members) end)
-      end
-    end
-
     def add_group(%__MODULE__{nodes_per_zone: nodes, consensus_groups: groups, members_per_leader_node: members} = state, group, n_replica) do
       if Map.has_key?(groups, group) do
         {{:error, :already_added}, state}
       else
-        new_groups = Map.put(groups, group, n_replica)
-        if map_size(nodes) == 0 do
-          {{:ok, []}, %__MODULE__{state | consensus_groups: new_groups}}
+        if Enum.empty?(nodes) do
+          {{:error, :no_active_node}, state}
         else
-          [leader | _] = member_nodes = NodesPerZone.lrw_members(nodes, group, n_replica)
-          pair = {group, member_nodes}
-          new_members = Map.update(members, leader, [pair], &[pair | &1])
-          new_state = %__MODULE__{state | consensus_groups: new_groups, members_per_leader_node: new_members}
-          {{:ok, member_nodes}, new_state}
+          new_groups = Map.put(groups, group, n_replica)
+          if map_size(nodes) == 0 do
+            {{:ok, []}, %__MODULE__{state | consensus_groups: new_groups}}
+          else
+            [leader | _] = member_nodes = NodesPerZone.lrw_members(nodes, group, n_replica)
+            pair = {group, member_nodes}
+            new_members = Map.update(members, leader, [pair], &[pair | &1])
+            new_state = %__MODULE__{state | consensus_groups: new_groups, members_per_leader_node: new_members}
+            {{:ok, member_nodes}, new_state}
+          end
         end
       end
     end
@@ -102,6 +78,34 @@ defmodule RaftFleet.Cluster do
       end
     end
 
+    def add_node(%__MODULE__{nodes_per_zone: nodes, consensus_groups: groups} = state, n, z) do
+      new_nodes  = Map.update(nodes, z, [n], fn ns -> Enum.uniq([n | ns]) end)
+      %__MODULE__{state | nodes_per_zone: new_nodes, members_per_leader_node: compute_members(new_nodes, groups)}
+    end
+
+    def remove_node(%__MODULE__{nodes_per_zone: nodes, consensus_groups: groups, unhealthy_members_map: umm, node_to_purge: node_to_purge} = state, n) do
+      new_nodes =
+        Enum.reduce(nodes, %{}, fn({z, ns}, m) ->
+          case ns do
+            [^n] -> m
+            _    -> Map.put(m, z, List.delete(ns, n))
+          end
+        end)
+      new_members       = compute_members(new_nodes, groups)
+      new_umm           = UnhealthyMembersCountsMap.remove_node(umm, n)
+      new_node_to_purge = if node_to_purge == n, do: nil, else: node_to_purge
+      %__MODULE__{state | nodes_per_zone: new_nodes, members_per_leader_node: new_members, unhealthy_members_map: new_umm, node_to_purge: new_node_to_purge}
+    end
+
+    defp compute_members(nodes, groups) do
+      if map_size(nodes) == 0 do
+        %{}
+      else
+        Enum.map(groups, fn {group, n_replica} -> {group, NodesPerZone.lrw_members(nodes, group, n_replica)} end)
+        |> Enum.group_by(fn {_, members} -> hd(members) end)
+      end
+    end
+
     def update_unhealthy_members(%__MODULE__{nodes_per_zone: nodes, unhealthy_members_map: umm} = state, from_node, counts, threshold) do
       participating_nodes = Enum.flat_map(nodes, fn {_z, ns} -> ns end)
       new_umm       = Map.put(umm, from_node, Map.take(counts, participating_nodes))
@@ -109,8 +113,6 @@ defmodule RaftFleet.Cluster do
       %__MODULE__{state | unhealthy_members_map: new_umm, node_to_purge: node_to_purge}
     end
   end
-
-  @type t :: State.t
 
   defmodule Hook do
     alias RaftFleet.Manager
@@ -122,7 +124,6 @@ defmodule RaftFleet.Cluster do
         {:add_group, group_name, _, rv_config} ->
           case ret do
             {:error, _}       -> nil
-            {:ok, []}         -> nil
             {:ok, [node | _]} ->
               case Manager.start_consensus_group_leader(group_name, node, rv_config) do
                 {:ok, _pid} -> :ok
@@ -131,21 +132,28 @@ defmodule RaftFleet.Cluster do
                   Manager.start_consensus_group_leader(group_name, Node.self, rv_config)
               end
           end
-        {:report_unhealthy_members, _, _, _} ->
-          node_to_purge = state_after.node_to_purge
-          if node_to_purge != state_before.node_to_purge do
-            Manager.node_purge_candidate_changed(node_to_purge)
-          end
+        {:remove_node, _}                    -> notify_if_node_to_purge_changed(state_before, state_after)
+        {:report_unhealthy_members, _, _, _} -> notify_if_node_to_purge_changed(state_before, state_after)
         _ -> nil
       end
     end
     def on_query_answered(_, _, _), do: nil
-    def on_follower_added(_), do: nil
-    def on_follower_removed(_), do: nil
-    def on_elected, do: nil
+    def on_follower_added(_, _), do: nil
+    def on_follower_removed(_, _), do: nil
+    def on_elected(state) do
+      Manager.node_purge_candidate_changed(state.node_to_purge)
+    end
+
+    defp notify_if_node_to_purge_changed(state_before, state_after) do
+      node_to_purge = state_after.node_to_purge
+      if node_to_purge != state_before.node_to_purge do
+        Manager.node_purge_candidate_changed(node_to_purge)
+      end
+    end
   end
 
   @behaviour RaftedValue.Data
+  @typep t :: State.t
 
   defun new :: t do
     q = CappedQueue.new(100)
@@ -153,10 +161,10 @@ defmodule RaftFleet.Cluster do
   end
 
   defun command(data :: t, arg :: Data.command_arg) :: {Data.command_ret, t} do
-    (data, {:add_node, node, zone}                      ) -> {:ok, State.add_node(data, node, zone)}
-    (data, {:remove_node, node}                         ) -> {:ok, State.remove_node(data, node)}
     (data, {:add_group, group, n, _rv_config}           ) -> State.add_group(data, group, n)
     (data, {:remove_group, group}                       ) -> State.remove_group(data, group)
+    (data, {:add_node, node, zone}                      ) -> {:ok, State.add_node(data, node, zone)}
+    (data, {:remove_node, node}                         ) -> {:ok, State.remove_node(data, node)}
     (data, {:report_unhealthy_members, from, counts, th}) -> {:ok, State.update_unhealthy_members(data, from, counts, th)}
     (data, _                                            ) -> {{:error, :invalid_command}, data}
   end
