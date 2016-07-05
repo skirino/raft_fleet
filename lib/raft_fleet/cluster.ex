@@ -127,7 +127,7 @@ defmodule RaftFleet.Cluster do
           case ret do
             {:error, _} -> nil
             :ok         ->
-              # Spawn leader in this node (neglecting desired leader defined by randezvous hashing) to avoid potential failures
+              # Spawn leader in this node (neglecting desired leader node defined by randezvous hashing) to avoid potential failures
               Manager.start_consensus_group_leader(group_name, rv_config)
           end
         {:remove_node, _}                    -> notify_if_node_to_purge_changed(state_before, state_after)

@@ -44,7 +44,7 @@ defmodule RaftFleet.MemberAdjusterTest do
         {[4, 1, 2, 3], 4, 1},
       ]
       |> Enum.each(fn {[leader_node | follower_nodes], n_expected, expected_leader_node} ->
-        {:ok, _} = Manager.start_consensus_group_leader(@group_name, @rv_config) |> at(i2node(leader_node))
+        Manager.start_consensus_group_leader(@group_name, @rv_config) |> at(i2node(leader_node))
         Enum.each(follower_nodes, fn n ->
           :timer.sleep(100)
           Manager.start_consensus_group_follower(@group_name, i2node(n))
