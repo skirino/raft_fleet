@@ -26,6 +26,12 @@ defmodule RaftFleet.MemberAdjusterTest do
     end)
   end
 
+  defp kill_all_consensus_members do
+    [Node.self | Node.list]
+    |> Enum.flat_map(fn n -> Supervisor.which_children({MemberSup, n}) end)
+    |> Enum.each(fn {_, pid, _, _} -> Process.exit(pid, :kill) end)
+  end
+
   test "MemberAdjuster.adjust_one_step/3" do
     with_slaves([:"2", :"3", :"4"], fn ->
       desired_member_nodes = Enum.map([1, 2, 3], &i2node/1)
@@ -49,17 +55,49 @@ defmodule RaftFleet.MemberAdjusterTest do
           :timer.sleep(100)
           Manager.start_consensus_group_follower(@group_name, i2node(n))
         end)
-        :timer.sleep(500)
+        :timer.sleep(100)
 
         MemberAdjuster.adjust_one_step([Node.self | Node.list], @group_name, desired_member_nodes)
-        :timer.sleep(500)
+        :timer.sleep(100)
         assert length(consensus_members) == n_expected
         assert RaftedValue.status({@group_name, i2node(expected_leader_node)})[:state_name] == :leader
 
-        [Node.self | Node.list]
-        |> Enum.flat_map(fn n -> Supervisor.which_children({MemberSup, n}) end)
-        |> Enum.each(fn {_, pid, _, _} -> Process.exit(pid, :kill) end)
+        kill_all_consensus_members
       end)
+    end)
+  end
+
+  test "MemberAdjuster.adjust_one_step/3 should remove pid that is definitely dead" do
+    with_slaves([:"2", :"3"], fn ->
+      desired_member_nodes = Enum.map([1, 2, 3], &i2node/1)
+
+      Manager.start_consensus_group_leader(@group_name, @rv_config)
+      Enum.each(Node.list, fn n ->
+        :timer.sleep(100)
+        Manager.start_consensus_group_follower(@group_name, n)
+      end)
+      :timer.sleep(100)
+
+      %{members: members1} = RaftedValue.status(@group_name)
+      assert length(members1) == 3
+      target_node = hd(Node.list)
+      target_pid  = Enum.find(members1, fn pid -> node(pid) == target_node end)
+      Process.exit(target_pid, :kill)
+      :timer.sleep(2_000) # wait until the killed process is recognized by the consensus leader
+
+      MemberAdjuster.adjust_one_step([Node.self | Node.list], @group_name, desired_member_nodes)
+      :timer.sleep(100)
+      %{members: members2} = RaftedValue.status(@group_name)
+      assert members2 == List.delete(members1, target_pid)
+
+      MemberAdjuster.adjust_one_step([Node.self | Node.list], @group_name, desired_member_nodes)
+      :timer.sleep(100)
+      %{members: members3} = RaftedValue.status(@group_name)
+      assert length(members3) == 3
+      [new_pid] = members3 -- members2
+      assert node(new_pid) == target_node
+
+      kill_all_consensus_members
     end)
   end
 end

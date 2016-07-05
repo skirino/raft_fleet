@@ -42,15 +42,23 @@ defmodule RaftFleet.MemberAdjuster do
             target_node = Enum.random(nodes_to_be_removed)
             target_pid  = Enum.find(members, fn m -> node(m) == target_node end)
             RaftedValue.remove_follower(pid, target_pid)
+          unresponsive_pids != [] ->
+            target_pid = Enum.random(unresponsive_pids)
+            case try_status(target_pid) do
+              :noproc ->
+                # `target_pid` is confirmed to be dead; remove it from the consensus group
+                RaftedValue.remove_follower(pid, target_pid)
+              _ -> :ok
+            end
           true -> :ok
         end
         Enum.map(unresponsive_pids, &node/1)
-      status_or_nil ->
+      status_or_reason ->
         pairs0 =
           List.delete(participating_nodes, leader_node)
           |> Enum.map(fn n -> {n, try_status({group_name, n})} end)
-          |> Enum.reject(&match?({_, nil}, &1))
-        pairs = if status_or_nil, do: [{leader_node, status_or_nil} | pairs0], else: pairs0
+          |> Enum.filter(&match?({_, %{}}, &1))
+        pairs = if is_map(status_or_reason), do: [{leader_node, status_or_reason} | pairs0], else: pairs0
         nodes_with_living_members = Enum.reject(pairs, &match?({_, nil}, &1)) |> Enum.map(fn {n, _} -> n end)
         cond do
           (nodes_to_be_added = desired_member_nodes -- nodes_with_living_members) != [] ->
@@ -68,7 +76,7 @@ defmodule RaftFleet.MemberAdjuster do
       # RaftedValue.status(dest)
       :gen_fsm.sync_send_all_state_event(dest, :status, 500)
     catch
-      :exit, _ -> nil
+      :exit, {reason, _} -> reason # :noproc, {:nodedown, node}, :timeout
     end
   end
 
@@ -81,7 +89,7 @@ defmodule RaftFleet.MemberAdjuster do
         statuses_not_participating =
           (Node.list -- Enum.map(pairs, fn {n, _} -> n end))
           |> Enum.map(fn n -> try_status({group_name, n}) end)
-          |> Enum.reject(&is_nil/1)
+          |> Enum.filter(&is_map/1)
         if Enum.empty?(statuses_not_participating) do
           nil
         else

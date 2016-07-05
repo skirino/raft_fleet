@@ -30,7 +30,7 @@ defmodule RaftFleetTest do
     assert Process.alive?(pid)  |> at(node)
     assert RaftFleet.deactivate |> at(node) == :ok
     assert RaftFleet.deactivate |> at(node) == {:error, :inactive}
-    :timer.sleep(2000)
+    :timer.sleep(2_000)
     refute Process.alive?(pid)  |> at(node)
   end
 
@@ -57,7 +57,7 @@ defmodule RaftFleetTest do
   end
 
   defp client_process_loop(name, n) do
-    :timer.sleep(:rand.uniform(1000))
+    :timer.sleep(:rand.uniform(1_000))
     assert RaftFleet.command(name, :inc) == {:ok, n}
     client_process_loop(name, n + 1)
   end
@@ -116,7 +116,7 @@ defmodule RaftFleetTest do
     end)
 
     # processes should be cleaned-up
-    :timer.sleep(2100)
+    :timer.sleep(2_100)
     assert_members_well_distributed(0)
   end
 
@@ -141,7 +141,7 @@ defmodule RaftFleetTest do
       Enum.each(nodes2, &activate_node(&1, zone_fun))
 
       # after several adjustments consensus members should be re-distributed
-      :timer.sleep(15_100)
+      :timer.sleep(20_100)
       assert_members_well_distributed(@n_consensus_groups)
 
       # deactivate/remove nodes one by one; client should be able to interact with consensus leaders
