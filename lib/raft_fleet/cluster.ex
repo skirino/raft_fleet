@@ -53,8 +53,7 @@ defmodule RaftFleet.Cluster do
           [leader | _] = member_nodes = NodesPerZone.lrw_members(nodes, group, n_replica)
           pair = {group, member_nodes}
           new_members = Map.update(members, leader, [pair], &[pair | &1])
-          new_state = %__MODULE__{state | consensus_groups: new_groups, members_per_leader_node: new_members}
-          {{:ok, member_nodes}, new_state}
+          {:ok, %__MODULE__{state | consensus_groups: new_groups, members_per_leader_node: new_members}}
         end
       end
     end
@@ -126,9 +125,9 @@ defmodule RaftFleet.Cluster do
       case entry do
         {:add_group, group_name, _, rv_config} ->
           case ret do
-            {:error, _}   -> nil
-            {:ok, _nodes} ->
-              # Spawn leader in this node to avoid potential failures
+            {:error, _} -> nil
+            :ok         ->
+              # Spawn leader in this node (neglecting desired leader defined by randezvous hashing) to avoid potential failures
               Manager.start_consensus_group_leader(group_name, rv_config)
           end
         {:remove_node, _}                    -> notify_if_node_to_purge_changed(state_before, state_after)
