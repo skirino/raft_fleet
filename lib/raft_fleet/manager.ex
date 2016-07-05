@@ -25,9 +25,7 @@ defmodule RaftFleet.Manager do
     if timer do
       {:reply, {:error, :activated}, state}
     else
-      rv_config = Cluster.rv_config
-      spec = Supervisor.Spec.worker(Cluster.Server, [rv_config, Cluster], [restart: :transient])
-      {:ok, pid} = Supervisor.start_child(RaftFleet.Supervisor, spec)
+      {:ok, pid} = Supervisor.start_child(RaftFleet.Supervisor, Cluster.Server.child_spec)
       {:ok, _} = RaftFleet.command(Cluster, {:add_node, Node.self, zone})
       {:reply, :ok, start_timer(state)}
     end
@@ -75,7 +73,7 @@ defmodule RaftFleet.Manager do
         state # don't invoke multiple workers
       else
         {pid, _} = spawn_monitor(MemberAdjuster, :adjust, [])
-        %State{worker: pid}
+        %State{state | worker: pid}
       end
     if timer do
       {:noreply, start_timer(new_state)}

@@ -5,13 +5,13 @@ defmodule RaftFleet.Cluster do
   alias RaftFleet.{NodesPerZone, ConsensusGroups, CappedQueue, MembersPerLeaderNode, UnhealthyMembersCountsMap}
 
   defmodule Server do
-    defun start_link(config :: RaftedValue.Config.t, name :: g[atom]) :: GenServer.on_start do
+    defun start_link(rv_config :: RaftedValue.Config.t, name :: g[atom]) :: GenServer.on_start do
       servers = Node.list |> Enum.map(fn n -> {name, n} end)
       # Use lock facility provided by :global module to avoid race conditions
       result =
         :global.trans({:raft_fleet_cluster_state_initialization, self}, fn ->
           if !Enum.any?(servers, &rafted_value_server_alive?/1) do
-            RaftedValue.start_link({:create_new_consensus_group, config}, name)
+            RaftedValue.start_link({:create_new_consensus_group, rv_config}, name)
           end
         end, [Node.self | Node.list], 0)
       case result do
@@ -22,13 +22,18 @@ defmodule RaftFleet.Cluster do
       end
     end
 
-    defun rafted_value_server_alive?(server :: {atom, node}) :: boolean do
+    defunp rafted_value_server_alive?(server :: {atom, node}) :: boolean do
       try do
         _ = RaftedValue.status(server)
         true
       catch
         :exit, {:noproc, _} -> false
       end
+    end
+
+    defun child_spec :: Supervisor.Spec.spec do
+      rv_config = RaftedValue.make_config(RaftFleet.Cluster, [leader_hook_module: RaftFleet.Cluster.Hook, election_timeout_clock_drift_margin: 500])
+      Supervisor.Spec.worker(__MODULE__, [rv_config, RaftFleet.Cluster], [restart: :transient])
     end
   end
 
@@ -173,9 +178,5 @@ defmodule RaftFleet.Cluster do
       groups_led_by_the_node = Map.get(members,node, [])
       {participating_nodes, groups_led_by_the_node, CappedQueue.underlying_queue(removed)}
     (_, _) -> {:error, :invalid_query}
-  end
-
-  defun rv_config :: RaftedValue.Config.t do
-    RaftedValue.make_config(__MODULE__, [leader_hook_module: Hook, election_timeout_clock_drift_margin: 500])
   end
 end
