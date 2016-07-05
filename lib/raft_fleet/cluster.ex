@@ -7,11 +7,18 @@ defmodule RaftFleet.Cluster do
   defmodule Server do
     defun start_link(config :: RaftedValue.Config.t, name :: g[atom]) :: GenServer.on_start do
       servers = Node.list |> Enum.map(fn n -> {name, n} end)
-      if Enum.any?(servers, &rafted_value_server_alive?/1) do
-        RaftedValue.start_link({:join_existing_consensus_group, servers}, name)
-      else
-        # FIXME: race condition to spawn multiple leaders each of which leads its own consensus group
-        RaftedValue.start_link({:create_new_consensus_group, config}, name)
+      # Use lock facility provided by :global module to avoid race conditions
+      result =
+        :global.trans({:raft_fleet_cluster_state_initialization, self}, fn ->
+          if !Enum.any?(servers, &rafted_value_server_alive?/1) do
+            RaftedValue.start_link({:create_new_consensus_group, config}, name)
+          end
+        end, [Node.self | Node.list], 0)
+      case result do
+        {:ok, pid} -> {:ok, pid}
+        _          ->
+          # Other server exists or cannot acquire lock
+          RaftedValue.start_link({:join_existing_consensus_group, servers}, name)
       end
     end
 
@@ -43,15 +50,11 @@ defmodule RaftFleet.Cluster do
           {{:error, :no_active_node}, state}
         else
           new_groups = Map.put(groups, group, n_replica)
-          if map_size(nodes) == 0 do
-            {{:ok, []}, %__MODULE__{state | consensus_groups: new_groups}}
-          else
-            [leader | _] = member_nodes = NodesPerZone.lrw_members(nodes, group, n_replica)
-            pair = {group, member_nodes}
-            new_members = Map.update(members, leader, [pair], &[pair | &1])
-            new_state = %__MODULE__{state | consensus_groups: new_groups, members_per_leader_node: new_members}
-            {{:ok, member_nodes}, new_state}
-          end
+          [leader | _] = member_nodes = NodesPerZone.lrw_members(nodes, group, n_replica)
+          pair = {group, member_nodes}
+          new_members = Map.update(members, leader, [pair], &[pair | &1])
+          new_state = %__MODULE__{state | consensus_groups: new_groups, members_per_leader_node: new_members}
+          {{:ok, member_nodes}, new_state}
         end
       end
     end

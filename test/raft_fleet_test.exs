@@ -19,7 +19,6 @@ defmodule RaftFleetTest do
   end
 
   defp activate_node(node, zone_fun) do
-    :timer.sleep(200) # hack to avoid duplicated leaders
     assert Supervisor.which_children(MemberSup) |> at(node) == []
     assert RaftFleet.deactivate                 |> at(node) == {:error, :inactive}
     assert RaftFleet.activate(zone_fun.(node))  |> at(node) == :ok
