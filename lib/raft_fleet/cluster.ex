@@ -126,14 +126,10 @@ defmodule RaftFleet.Cluster do
       case entry do
         {:add_group, group_name, _, rv_config} ->
           case ret do
-            {:error, _}       -> nil
-            {:ok, [node | _]} ->
-              case Manager.start_consensus_group_leader(group_name, node, rv_config) do
-                {:ok, _pid} -> :ok
-                {:error, _} ->
-                  # failed to start leader at `node`; temporarily hand-off to `Node.self`
-                  Manager.start_consensus_group_leader(group_name, Node.self, rv_config)
-              end
+            {:error, _}   -> nil
+            {:ok, _nodes} ->
+              # Spawn leader in this node to avoid potential failures
+              Manager.start_consensus_group_leader(group_name, rv_config)
           end
         {:remove_node, _}                    -> notify_if_node_to_purge_changed(state_before, state_after)
         {:report_unhealthy_members, _, _, _} -> notify_if_node_to_purge_changed(state_before, state_after)

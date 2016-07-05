@@ -131,8 +131,8 @@ defmodule RaftFleet.Manager do
     GenServer.cast(__MODULE__, {:node_purge_candidate_changed, node_to_purge})
   end
 
-  defun start_consensus_group_leader(name :: atom, node :: node, rv_config :: RaftedValue.Config.t) :: Supervisor.on_start_child do
-    GenServer.call({__MODULE__, node}, {:start_consensus_group_leader, name, rv_config})
+  defun start_consensus_group_leader(name :: atom, rv_config :: RaftedValue.Config.t) :: Supervisor.on_start_child do
+    GenServer.call(__MODULE__, {:start_consensus_group_leader, name, rv_config})
   end
 
   defun start_consensus_group_follower(name :: atom, node :: node) :: :ok do
