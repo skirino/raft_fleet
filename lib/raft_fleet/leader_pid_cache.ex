@@ -19,4 +19,9 @@ defmodule RaftFleet.LeaderPidCache do
     :ets.insert(@table_name, {name, leader})
     :ok
   end
+
+  defun unset(name :: atom) :: :ok do
+    :ets.delete(@table_name, name)
+    :ok
+  end
 end
