@@ -1,6 +1,6 @@
 use Croma
 
-defmodule RaftFleet.MemberAdjuster do
+defmodule RaftFleet.ConsensusMemberAdjuster do
   alias RaftFleet.{Cluster, Manager, Config}
 
   def adjust do

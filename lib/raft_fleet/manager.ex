@@ -3,7 +3,7 @@ alias Croma.TypeGen, as: TG
 
 defmodule RaftFleet.Manager do
   use GenServer
-  alias RaftFleet.{Cluster, MemberSup, MemberAdjuster, LeaderPidCache, Config}
+  alias RaftFleet.{Cluster, ConsensusMemberSup, ConsensusMemberAdjuster, LeaderPidCache, Config}
 
   defmodule State do
     use Croma.Struct, fields: [
@@ -55,12 +55,12 @@ defmodule RaftFleet.Manager do
     {:noreply, new_state}
   end
   def handle_cast({:start_consensus_group_leader, name, rv_config}, state) do
-    Supervisor.start_child(MemberSup, [{:create_new_consensus_group, rv_config}, name])
+    Supervisor.start_child(ConsensusMemberSup, [{:create_new_consensus_group, rv_config}, name])
     {:noreply, state}
   end
   def handle_cast({:start_consensus_group_follower, name}, state) do
     other_node_members = Enum.map(Node.list, fn n -> {name, n} end)
-    Supervisor.start_child(MemberSup, [{:join_existing_consensus_group, other_node_members}, name])
+    Supervisor.start_child(ConsensusMemberSup, [{:join_existing_consensus_group, other_node_members}, name])
     {:noreply, state}
   end
   def handle_cast(_msg, state) do
@@ -72,7 +72,7 @@ defmodule RaftFleet.Manager do
       if worker do
         state # don't invoke multiple workers
       else
-        {pid, _} = spawn_monitor(MemberAdjuster, :adjust, [])
+        {pid, _} = spawn_monitor(ConsensusMemberAdjuster, :adjust, [])
         %State{state | worker: pid}
       end
     if timer do

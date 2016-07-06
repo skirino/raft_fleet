@@ -10,7 +10,7 @@ defmodule RaftFleet do
     LeaderPidCache.init
     children = [
       Spec.worker(Manager, []),
-      Spec.supervisor(RaftFleet.MemberSup, []),
+      Spec.supervisor(RaftFleet.ConsensusMemberSup, []),
     ]
     opts = [strategy: :one_for_one, name: RaftFleet.Supervisor]
     Supervisor.start_link(children, opts)

@@ -32,8 +32,9 @@ defmodule RaftFleet.Cluster do
     end
 
     defun child_spec :: Supervisor.Spec.spec do
-      rv_config = RaftedValue.make_config(RaftFleet.Cluster, [leader_hook_module: RaftFleet.Cluster.Hook, election_timeout_clock_drift_margin: 500])
-      Supervisor.Spec.worker(__MODULE__, [rv_config, RaftFleet.Cluster], [restart: :transient])
+      alias RaftFleet.Cluster, as: C
+      rv_config = RaftedValue.make_config(C, [leader_hook_module: C.Hook, election_timeout_clock_drift_margin: 500])
+      Supervisor.Spec.worker(__MODULE__, [rv_config, C], [restart: :transient])
     end
   end
 
@@ -43,7 +44,7 @@ defmodule RaftFleet.Cluster do
       consensus_groups:                 ConsensusGroups,
       recently_removed_consensus_names: CappedQueue,
       members_per_leader_node:          MembersPerLeaderNode,      # this is cache; reproducible from `nodes` and `consensus_groups`
-      unhealthy_members_map:            UnhealthyMembersCountsMap, # to calculate candidate node to purge
+      unhealthy_members_map:            UnhealthyMembersCountsMap, # reported from all active nodes; used to calculate `node_to_purge`
       node_to_purge:                    TG.nilable(Croma.Atom),    # node that has too many unhealthy raft members
     ]
 
@@ -169,7 +170,7 @@ defmodule RaftFleet.Cluster do
     (data, {:add_node, node, zone}                      ) -> {:ok, State.add_node(data, node, zone)}
     (data, {:remove_node, node}                         ) -> {:ok, State.remove_node(data, node)}
     (data, {:report_unhealthy_members, from, counts, th}) -> {:ok, State.update_unhealthy_members(data, from, counts, th)}
-    (data, _                                            ) -> {{:error, :invalid_command}, data}
+    (data, _                                            ) -> {{:error, :invalid_command}, data} # For safety
   end
 
   defun query(data :: t, arg :: Data.query_arg) :: Data.query_ret do
@@ -177,6 +178,6 @@ defmodule RaftFleet.Cluster do
       participating_nodes = Enum.flat_map(nodes, fn {_z, ns} -> ns end)
       groups_led_by_the_node = Map.get(members,node, [])
       {participating_nodes, groups_led_by_the_node, CappedQueue.underlying_queue(removed)}
-    (_, _) -> {:error, :invalid_query}
+    (_, _) -> {:error, :invalid_query} # For safety
   end
 end

@@ -5,7 +5,7 @@ defmodule RaftFleet.NodesPerZone do
   alias RaftFleet.{Hash, ZoneId}
   use Croma.SubtypeOfMap, key_module: ZoneId, value_module: TG.list_of(Croma.Atom)
 
-  defun lrw_members(nodes_per_zone :: t, group :: atom, n_take :: pos_integer) :: [node] do
+  defun lrw_members(nodes_per_zone :: t, group :: atom, n_replica :: pos_integer) :: [node] do
     Enum.flat_map(nodes_per_zone, fn {_z, ns} ->
       Enum.map(ns, fn n -> {Hash.calc({n, group}), n} end)
       |> Enum.sort
@@ -14,6 +14,6 @@ defmodule RaftFleet.NodesPerZone do
     end)
     |> Enum.sort
     |> Enum.map(fn {_i, _h, n} -> n end)
-    |> Enum.take(n_take)
+    |> Enum.take(n_replica)
   end
 end

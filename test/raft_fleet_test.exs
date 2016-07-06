@@ -3,7 +3,7 @@ defmodule RaftFleetTest do
   @moduletag timeout: 200_000
 
   import SlaveNode
-  alias RaftFleet.MemberSup
+  alias RaftFleet.ConsensusMemberSup
 
   setup_all do
     Node.start(:"1", :shortnames)
@@ -19,10 +19,10 @@ defmodule RaftFleetTest do
   end
 
   defp activate_node(node, zone_fun) do
-    assert Supervisor.which_children(MemberSup) |> at(node) == []
-    assert RaftFleet.deactivate                 |> at(node) == {:error, :inactive}
-    assert RaftFleet.activate(zone_fun.(node))  |> at(node) == :ok
-    assert RaftFleet.activate(zone_fun.(node))  |> at(node) == {:error, :activated}
+    assert Supervisor.which_children(ConsensusMemberSup) |> at(node) == []
+    assert RaftFleet.deactivate                          |> at(node) == {:error, :inactive}
+    assert RaftFleet.activate(zone_fun.(node))           |> at(node) == :ok
+    assert RaftFleet.activate(zone_fun.(node))           |> at(node) == {:error, :activated}
   end
 
   defp deactivate_node(node) do
@@ -35,7 +35,7 @@ defmodule RaftFleetTest do
   end
 
   defp kill_all_consensus_members_in_local_node do
-    Supervisor.which_children(MemberSup)
+    Supervisor.which_children(ConsensusMemberSup)
     |> Enum.each(fn {_, pid, _, _} -> :gen_fsm.stop(pid) end)
   end
 
@@ -66,7 +66,7 @@ defmodule RaftFleetTest do
     {:ok, {participating_nodes, _, _}} = RaftFleet.query(RaftFleet.Cluster, {:consensus_groups, Node.self})
     {members, leaders} =
       Enum.map(participating_nodes, fn n ->
-        children = Supervisor.which_children({MemberSup, n}) # should not exit; all participating nodes should be alive
+        children = Supervisor.which_children({ConsensusMemberSup, n}) # should not exit; all participating nodes should be alive
         statuses = Enum.map(children, fn {_, pid, _, _} -> RaftedValue.status(pid) end)
         assert Enum.all?(statuses, &Enum.empty?(&1[:unresponsive_followers]))
         n_leaders = Enum.count(statuses, &(&1[:state_name] == :leader))
@@ -79,7 +79,7 @@ defmodule RaftFleetTest do
 
     ([Node.self | Node.list] -- participating_nodes)
     |> Enum.each(fn n ->
-      assert Supervisor.which_children({MemberSup, n}) == []
+      assert Supervisor.which_children({ConsensusMemberSup, n}) == []
     end)
   end
 
