@@ -11,7 +11,7 @@ defmodule RaftFleetTest do
   end
 
   @n_consensus_groups 100
-  @rv_config          RaftedValue.make_config(RaftFleet.JustAnInt, [election_timeout: 300])
+  @rv_config          RaftedValue.make_config(RaftFleet.JustAnInt)
 
   defp zone(node, n) do
     i = Atom.to_string(node) |> String.split("@") |> hd |> String.to_integer |> rem(n)
@@ -141,7 +141,7 @@ defmodule RaftFleetTest do
       Enum.each(nodes2, &activate_node(&1, zone_fun))
 
       # after several adjustments consensus members should be re-distributed
-      :timer.sleep(20_100)
+      :timer.sleep(25_100)
       assert_members_well_distributed(@n_consensus_groups)
 
       # deactivate/remove nodes one by one; client should be able to interact with consensus leaders

@@ -115,7 +115,7 @@ defmodule RaftFleet.Manager do
         members ->
           next_leader = Enum.random(members)
           :ok = RaftedValue.replace_leader(leader, next_leader)
-          :timer.sleep(3_000)
+          :timer.sleep(1_000)
           :ok = RaftedValue.remove_follower(next_leader, Process.whereis(Cluster))
       end
     else
