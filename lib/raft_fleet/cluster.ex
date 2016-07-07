@@ -72,7 +72,8 @@ defmodule RaftFleet.Cluster do
           [leader | _] = member_nodes = NodesPerZone.lrw_members(nodes, group, n_replica)
           pair = {group, member_nodes}
           new_members = Map.update(members, leader, [pair], &[pair | &1])
-          {:ok, %__MODULE__{state | consensus_groups: new_groups, members_per_leader_node: new_members}}
+          new_state = %__MODULE__{state | consensus_groups: new_groups, members_per_leader_node: new_members}
+          {{:ok, member_nodes}, new_state}
         end
       end
     end
@@ -142,12 +143,14 @@ defmodule RaftFleet.Cluster do
 
     def on_command_committed(state_before, entry, ret, state_after) do
       case entry do
-        {:add_group, group_name, _, rv_config} ->
-          case ret do
-            {:error, _} -> nil
-            :ok         ->
-              # Spawn leader in this node (neglecting desired leader node defined by randezvous hashing) to avoid potential failures
-              Manager.start_consensus_group_leader(group_name, rv_config)
+        {:add_group, group_name, _, rv_config, leader_node} ->
+          # Start leader only when this hook is run on the same node to which :add_group command was submitted
+          # in order not to spawn multiple leaders even if this log entry is committed multiple times
+          if Node.self == leader_node do
+            case ret do
+              {:error, _}  -> nil
+              {:ok, nodes} -> Manager.start_consensus_group_members(group_name, rv_config, nodes)
+            end
           end
         {:remove_node, _}                    -> notify_if_node_to_purge_changed(state_before, state_after)
         {:report_unhealthy_members, _, _, _} -> notify_if_node_to_purge_changed(state_before, state_after)
@@ -178,7 +181,7 @@ defmodule RaftFleet.Cluster do
   end
 
   defun command(data :: t, arg :: Data.command_arg) :: {Data.command_ret, t} do
-    (data, {:add_group, group, n, _rv_config}           ) -> State.add_group(data, group, n)
+    (data, {:add_group, group, n, _rv_config, _node}    ) -> State.add_group(data, group, n)
     (data, {:remove_group, group}                       ) -> State.remove_group(data, group)
     (data, {:add_node, node, zone}                      ) -> {:ok, State.add_node(data, node, zone)}
     (data, {:remove_node, node}                         ) -> {:ok, State.remove_node(data, node)}

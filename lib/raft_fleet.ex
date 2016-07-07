@@ -20,6 +20,10 @@ defmodule RaftFleet do
     Supervisor.start_link(children, opts)
   end
 
+  @default_timeout        500
+  @default_retry          3
+  @default_retry_interval 1_000
+
   @doc """
   Activates `Node.self()`.
 
@@ -69,8 +73,16 @@ defmodule RaftFleet do
   defun add_consensus_group(name      :: g[atom],
                             n_replica :: g[pos_integer],
                             rv_config = %RaftedValue.Config{}) :: :ok | {:error, :already_added} do
-    {:ok, ret} = RaftFleet.command(RaftFleet.Cluster, {:add_group, name, n_replica, rv_config})
-    ret
+    ref = make_ref
+    {:ok, ret} =
+      call_with_retry(RaftFleet.Cluster, @default_retry + 1, @default_retry_interval, fn pid ->
+        command_arg = {:add_group, name, n_replica, rv_config, node(pid)}
+        RaftedValue.command(pid, command_arg, @default_timeout, ref)
+      end)
+    case ret do
+      {:ok, _nodes} -> :ok
+      error         -> error
+    end
   end
 
   @doc """
@@ -102,9 +114,9 @@ defmodule RaftFleet do
   """
   defun command(name           :: g[atom],
                 command_arg    :: Data.command_arg,
-                timeout        :: g[pos_integer]     \\ 500,
-                retry          :: g[non_neg_integer] \\ 3,
-                retry_interval :: g[pos_integer]     \\ 1_000) :: {:ok, Data.command_ret} | {:error, :no_leader} do
+                timeout        :: g[pos_integer]     \\ @default_timeout,
+                retry          :: g[non_neg_integer] \\ @default_retry,
+                retry_interval :: g[pos_integer]     \\ @default_retry_interval) :: {:ok, Data.command_ret} | {:error, :no_leader} do
     ref = make_ref
     call_with_retry(name, retry + 1, retry_interval, fn pid ->
       RaftedValue.command(pid, command_arg, timeout, ref)
@@ -119,9 +131,9 @@ defmodule RaftFleet do
   """
   defun query(name           :: g[atom],
               query_arg      :: Data.query_arg,
-              timeout        :: g[pos_integer]     \\ 500,
-              retry          :: g[non_neg_integer] \\ 3,
-              retry_interval :: g[pos_integer]     \\ 1_000) :: {:ok, Data.query_ret} | {:error, :no_leader} do
+              timeout        :: g[pos_integer]     \\ @default_timeout,
+              retry          :: g[non_neg_integer] \\ @default_retry,
+              retry_interval :: g[pos_integer]     \\ @default_retry_interval) :: {:ok, Data.query_ret} | {:error, :no_leader} do
     call_with_retry(name, retry + 1, retry_interval, fn pid ->
       RaftedValue.query(pid, query_arg, timeout)
     end)

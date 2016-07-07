@@ -54,8 +54,13 @@ defmodule RaftFleet.Manager do
     new_state = %State{state | purge_wait_timer: ref2}
     {:noreply, new_state}
   end
-  def handle_cast({:start_consensus_group_leader, name, rv_config}, state) do
-    Supervisor.start_child(ConsensusMemberSup, [{:create_new_consensus_group, rv_config}, name])
+  def handle_cast({:start_consensus_group_members, name, rv_config, member_nodes}, state) do
+    # Spawn leader in this node (neglecting desired leader node defined by randezvous hashing) to avoid potential failures
+    {:ok, _} = Supervisor.start_child(ConsensusMemberSup, [{:create_new_consensus_group, rv_config}, name])
+    List.delete(member_nodes, Node.self)
+    |> Enum.each(fn n ->
+      start_consensus_group_follower(name, n)
+    end)
     {:noreply, state}
   end
   def handle_cast({:start_consensus_group_follower, name}, state) do
@@ -129,8 +134,8 @@ defmodule RaftFleet.Manager do
     GenServer.cast(__MODULE__, {:node_purge_candidate_changed, node_to_purge})
   end
 
-  defun start_consensus_group_leader(name :: atom, rv_config :: RaftedValue.Config.t) :: :ok do
-    GenServer.cast(__MODULE__, {:start_consensus_group_leader, name, rv_config})
+  defun start_consensus_group_members(name :: atom, rv_config :: RaftedValue.Config.t, member_nodes :: [node]) :: :ok do
+    GenServer.cast(__MODULE__, {:start_consensus_group_members, name, rv_config, member_nodes})
   end
 
   defun start_consensus_group_follower(name :: atom, node :: node) :: :ok do
