@@ -1,22 +1,26 @@
 use Croma
 
 defmodule RaftFleet.ConsensusMemberAdjuster do
-  alias RaftFleet.{Cluster, Manager, Config}
+  alias RaftFleet.{Cluster, Manager, LeaderPidCache, Config}
 
   def adjust do
     case RaftFleet.query(Cluster, {:consensus_groups, Node.self}) do
       {:error, _} ->
         :ok # ignore error, just retry at the next time
       {:ok, {participating_nodes, groups, removed_groups_queue}} ->
-        {removed1, removed2} = removed_groups_queue
-        Enum.each(removed1, &brutally_kill/1)
-        Enum.each(removed2, &brutally_kill/1)
-        unhealthy_members_counts =
-          Enum.flat_map(groups, fn group -> do_adjust(participating_nodes, group) end)
-          |> Enum.reduce(%{}, fn(node, map) -> Map.update(map, node, 1, &(&1 + 1)) end)
-        threshold = Config.node_purge_threshold_failing_members
-        RaftFleet.command(Cluster, {:report_unhealthy_members, Node.self, unhealthy_members_counts, threshold})
+        leader_pid = LeaderPidCache.get(Cluster)
+        kill_members_of_removed_groups(removed_groups_queue)
+        adjust_consensus_member_sets(participating_nodes, groups)
+        if node(leader_pid) == Node.self do
+          adjust_cluster_consensus_members(leader_pid)
+        end
     end
+  end
+
+  defp kill_members_of_removed_groups(removed_groups_queue) do
+    {removed1, removed2} = removed_groups_queue
+    Enum.each(removed1, &brutally_kill/1)
+    Enum.each(removed2, &brutally_kill/1)
   end
 
   defp brutally_kill(group_name) do
@@ -24,6 +28,14 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
       nil -> :ok
       pid -> :gen_fsm.stop(pid)
     end
+  end
+
+  defp adjust_consensus_member_sets(participating_nodes, groups) do
+    unhealthy_members_counts =
+      Enum.flat_map(groups, fn group -> do_adjust(participating_nodes, group) end)
+      |> Enum.reduce(%{}, fn(node, map) -> Map.update(map, node, 1, &(&1 + 1)) end)
+    threshold = Config.node_purge_threshold_failing_members
+    RaftFleet.command(Cluster, {:report_unhealthy_members, Node.self, unhealthy_members_counts, threshold})
   end
 
   defp do_adjust(_, {_, []}), do: []
@@ -107,5 +119,20 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
       %{state_name: :leader, from: from} -> from
       _                                  -> nil
     end)
+  end
+
+  defp adjust_cluster_consensus_members(leader_pid) do
+    # when cluster consensus member process dies and is restarted by its supervisor, pid of the dead process should be removed from consensus
+    case RaftedValue.status(leader_pid) do
+      %{unresponsive_followers: []} -> :ok
+      %{members: member_pids, unresponsive_followers: unresponsive_pids} ->
+        healthy_member_nodes = Enum.map(member_pids -- unresponsive_pids, &node/1)
+        targets = Enum.filter(unresponsive_pids, fn pid -> node(pid) in healthy_member_nodes end)
+        if targets != [] do
+          target_pid = Enum.random(targets)
+          RaftedValue.remove_follower(leader_pid, target_pid)
+        end
+      _ -> :ok
+    end
   end
 end

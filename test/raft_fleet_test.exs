@@ -120,6 +120,23 @@ defmodule RaftFleetTest do
     assert_members_well_distributed(0)
   end
 
+  cluster_node_zone_configurations = [
+    {1, 1},
+    {2, 1},
+    {3, 1},
+    {2, 2},
+    {4, 2},
+    {3, 3},
+    {6, 3},
+  ]
+
+  Enum.each(cluster_node_zone_configurations, fn {n_nodes, n_zones} ->
+    slaves = Enum.map(1 .. n_nodes, fn i -> :"#{i}" end) |> tl
+    test "startup/shutdown of statically defined nodes: #{n_nodes} node(s) in #{n_zones} zone(s)" do
+      run_basic_setup_test(unquote(slaves), &zone(&1, unquote(n_zones)))
+    end
+  end)
+
   defp run_basic_setup_test(node_names, zone_fun) do
     with_slaves(node_names, fn ->
       with_active_nodes([Node.self | Node.list], zone_fun, fn ->
@@ -129,6 +146,15 @@ defmodule RaftFleetTest do
       end)
     end)
   end
+
+  Enum.filter(cluster_node_zone_configurations, fn {n_nodes, _} -> n_nodes >= 2 end) # at least 2 nodes are necessary
+  |> Enum.each(fn {n_nodes, n_zones} ->
+    slaves1 = Enum.map(          1 ..     n_nodes, fn i -> :"#{i}" end) |> tl
+    slaves2 = Enum.map(n_nodes + 1 .. 2 * n_nodes, fn i -> :"#{i}" end)
+    test "dynamically adding/removing node should invoke rebalancing of consensus members: #{n_nodes} => #{2 * n_nodes} => #{n_nodes} in #{n_zones} zone(s)" do
+      run_node_addition_and_removal_test(unquote(slaves1), unquote(slaves2), &zone(&1, unquote(n_zones)))
+    end
+  end)
 
   defp run_node_addition_and_removal_test(node_names1, node_names2, zone_fun) do
     Enum.each(node_names1, &start_slave/1)
@@ -157,6 +183,15 @@ defmodule RaftFleetTest do
     kill_all_consensus_members_in_local_node
   end
 
+  Enum.filter(cluster_node_zone_configurations, fn {n_nodes, _} -> n_nodes >= 3 end) # at least 2 nodes are necessary after 1 node failure
+  |> Enum.each(fn {n_nodes, n_zones} ->
+    slaves = Enum.map(1 .. n_nodes, fn i -> :"#{i}" end) |> tl
+    slave_that_fails = List.last(slaves)
+    test "node failure should invoke purging of the node and rebalancing of consensus members: #{n_nodes} nodes in #{n_zones} zone(s)" do
+      run_node_failure_test(unquote(slaves), unquote(slave_that_fails), &zone(&1, unquote(n_zones)))
+    end
+  end)
+
   defp run_node_failure_test(node_names, node_to_fail, zone_fun) do
     Enum.each(node_names, &start_slave/1)
     nodes = [Node.self | Node.list]
@@ -178,38 +213,34 @@ defmodule RaftFleetTest do
     kill_all_consensus_members_in_local_node
   end
 
-  cluster_node_zone_configurations = [
-    {1, 1},
-    {2, 1},
-    {3, 1},
-    {2, 2},
-    {4, 2},
-    {3, 3},
-    {6, 3},
-  ]
-
-  Enum.each(cluster_node_zone_configurations, fn {n_nodes, n_zones} ->
-    slaves = Enum.map(1 .. n_nodes, fn i -> :"#{i}" end) |> tl
-    test "startup/shutdown of statically defined nodes: #{n_nodes} node(s) in #{n_zones} zone(s)" do
-      run_basic_setup_test(unquote(slaves), &zone(&1, unquote(n_zones)))
-    end
-  end)
-
-  Enum.filter(cluster_node_zone_configurations, fn {n_nodes, _} -> n_nodes >= 2 end) # at least 2 nodes are necessary
-  |> Enum.each(fn {n_nodes, n_zones} ->
-    slaves1 = Enum.map(          1 ..     n_nodes, fn i -> :"#{i}" end) |> tl
-    slaves2 = Enum.map(n_nodes + 1 .. 2 * n_nodes, fn i -> :"#{i}" end)
-    test "dynamically adding/removing node should invoke rebalancing of consensus members: #{n_nodes} => #{2 * n_nodes} => #{n_nodes} in #{n_zones} zone(s)" do
-      run_node_addition_and_removal_test(unquote(slaves1), unquote(slaves2), &zone(&1, unquote(n_zones)))
-    end
-  end)
-
   Enum.filter(cluster_node_zone_configurations, fn {n_nodes, _} -> n_nodes >= 3 end) # at least 2 nodes are necessary after 1 node failure
   |> Enum.each(fn {n_nodes, n_zones} ->
     slaves = Enum.map(1 .. n_nodes, fn i -> :"#{i}" end) |> tl
-    slave_that_fails = List.last(slaves)
-    test "node failure should invoke purging of the node and rebalancing of consensus members: #{n_nodes} nodes in #{n_zones} zone(s)" do
-      run_node_failure_test(unquote(slaves), unquote(slave_that_fails), &zone(&1, unquote(n_zones)))
+    test "should automatically recover from accidental death of a cluster consensus member: #{n_nodes} nodes in #{n_zones} zone(s)" do
+      run_cluster_consensus_member_failure_test(unquote(slaves), &zone(&1, unquote(n_zones)))
     end
   end)
+
+  defp run_cluster_consensus_member_failure_test(node_names, zone_fun) do
+    with_slaves(node_names, fn ->
+      all_nodes = [Node.self | Node.list]
+      with_active_nodes(all_nodes, zone_fun, fn ->
+        Enum.each(all_nodes, fn n ->
+          assert Process.whereis(RaftFleet.Cluster) |> at(n)
+        end)
+
+        :timer.sleep(1000)
+        target_pid = Process.whereis(RaftFleet.Cluster) |> at(Enum.random(all_nodes))
+        Process.exit(target_pid, :kill)
+        :timer.sleep(10_000)
+
+        statuses =
+          Enum.map(all_nodes, fn n ->
+            RaftedValue.status({RaftFleet.Cluster, n})
+          end)
+        status_of_leader = Enum.find(statuses, &match?(%{state_name: :leader}, &1))
+        assert status_of_leader[:unresponsive_followers] == []
+      end)
+    end)
+  end
 end

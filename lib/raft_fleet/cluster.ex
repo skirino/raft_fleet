@@ -16,9 +16,8 @@ defmodule RaftFleet.Cluster do
       case result do
         {:ok, pid} -> {:ok, pid}
         _          ->
-          # Other server exists or cannot acquire lock
-          servers = Node.list |> Enum.map(fn n -> {name, n} end)
-          RaftedValue.start_link({:join_existing_consensus_group, servers}, name)
+          # Other server exists or cannot acquire lock; we need retry as there may be no leader
+          start_follower_with_retry(name, 3)
       end
     end
 
@@ -28,6 +27,20 @@ defmodule RaftFleet.Cluster do
         true
       catch
         :exit, {:noproc, _} -> false
+      end
+    end
+
+    defunp start_follower_with_retry(name :: atom, tries_remaining :: non_neg_integer) :: GenServer.on_start do
+      if tries_remaining == 0 do
+        {:error, :no_leader}
+      else
+        servers = Node.list |> Enum.map(fn n -> {name, n} end)
+        case RaftedValue.start_link({:join_existing_consensus_group, servers}, name) do
+          {:ok, pid}  -> {:ok, pid}
+          {:error, _} ->
+            :timer.sleep(1_000)
+            start_follower_with_retry(name, tries_remaining - 1)
+        end
       end
     end
 
