@@ -111,6 +111,7 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
     end
   end
 
+  defp find_leader_from_statuses([]), do: nil
   defp find_leader_from_statuses(statuses) do
     statuses_by_term = Enum.group_by(statuses, fn %{current_term: t} -> t end)
     latest_term = Map.keys(statuses_by_term) |> Enum.max
