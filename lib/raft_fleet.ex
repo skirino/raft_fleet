@@ -28,6 +28,9 @@ defmodule RaftFleet do
   `zone` is an ID of data center zone which this node belongs to.
   `zone` is used to determine which nodes to replicate data:
   RaftFleet tries to place members of a consensus group across multiple zones for maximum availability.
+
+  Node activation by calling this function should be done after the node is fully connected to the other existing nodes;
+  otherwise there is a possibility (although it is small) that the cluster forms partitioned subset of active nodes.
   """
   defun activate(zone :: ZoneId.t) :: :ok | {:error, :activated} do
     GenServer.call(Manager, {:activate, zone})
@@ -42,6 +45,19 @@ defmodule RaftFleet do
   """
   defun deactivate :: :ok | {:error, :inactive} do
     GenServer.call(Manager, :deactivate)
+  end
+
+  @doc """
+  Queries the current nodes which have been activated using `activate/1` in the cluster.
+
+  This function sends a query to a leader of the "cluster consensus group", which is managed internally by raft_fleet.
+  The returned value is grouped by zone IDs which have been passed to `activate/1`.
+
+
+  """
+  defun active_nodes :: %{ZoneId.t => [node]} do
+    {:ok, ret} = RaftFleet.query(RaftFleet.Cluster, :active_nodes)
+    ret
   end
 
   @doc """

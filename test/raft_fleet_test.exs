@@ -229,7 +229,7 @@ defmodule RaftFleetTest do
           assert Process.whereis(RaftFleet.Cluster) |> at(n)
         end)
 
-        :timer.sleep(1000)
+        :timer.sleep(1_000)
         target_pid = Process.whereis(RaftFleet.Cluster) |> at(Enum.random(all_nodes))
         Process.exit(target_pid, :kill)
         :timer.sleep(10_000)
@@ -240,6 +240,17 @@ defmodule RaftFleetTest do
           end)
         status_of_leader = Enum.find(statuses, &match?(%{state_name: :leader}, &1))
         assert status_of_leader[:unresponsive_followers] == []
+      end)
+    end)
+  end
+
+  test "active_nodes/0" do
+    catch_error RaftFleet.active_nodes # before activate/1
+    with_slaves([:"2", :"3"], fn ->
+      with_active_nodes([Node.self | Node.list], &zone(&1, 2), fn ->
+        nodes = RaftFleet.active_nodes
+        assert Map.keys(nodes) |> Enum.sort == ["zone0", "zone1"]
+        assert Map.values(nodes) |> List.flatten |> Enum.sort == Enum.sort([Node.self | Node.list])
       end)
     end)
   end
