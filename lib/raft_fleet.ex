@@ -48,7 +48,7 @@ defmodule RaftFleet do
   these processes will be gradually migrated to other nodes by periodic rebalancing.
   """
   defun deactivate :: :ok | {:error, :inactive} do
-    GenServer.call(Manager, :deactivate, 10_000)
+    GenServer.call(Manager, :deactivate)
   end
 
   @doc """

@@ -38,7 +38,7 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
   defp call_adjust_one_step do
     desired_member_nodes = Enum.map([1, 2, 3], &i2node/1)
     ConsensusMemberAdjuster.adjust_one_step([Node.self | Node.list], @group_name, desired_member_nodes)
-    :timer.sleep(100)
+    :timer.sleep(500)
   end
 
   defp kill_all_consensus_members do

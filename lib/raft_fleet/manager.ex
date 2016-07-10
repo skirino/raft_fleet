@@ -39,9 +39,6 @@ defmodule RaftFleet.Manager do
       {:reply, {:error, :inactive}, state}
     end
   end
-  def handle_call(msg, _from, state) do
-    {:reply, msg, state}
-  end
 
   def handle_cast({:node_purge_candidate_changed, node_to_purge}, %State{purge_wait_timer: ref1} = state) do
     if ref1, do: Process.cancel_timer(ref1)
@@ -51,8 +48,7 @@ defmodule RaftFleet.Manager do
       else
         nil
       end
-    new_state = %State{state | purge_wait_timer: ref2}
-    {:noreply, new_state}
+    {:noreply, %State{state | purge_wait_timer: ref2}}
   end
   def handle_cast({:start_consensus_group_members, name, rv_config, member_nodes}, state) do
     # Spawn leader in this node (neglecting desired leader node defined by randezvous hashing) to avoid potential failures
@@ -65,10 +61,7 @@ defmodule RaftFleet.Manager do
   end
   def handle_cast({:start_consensus_group_follower, name}, state) do
     other_node_members = Enum.map(Node.list, fn n -> {name, n} end)
-    Supervisor.start_child(ConsensusMemberSup, [{:join_existing_consensus_group, other_node_members}, name])
-    {:noreply, state}
-  end
-  def handle_cast(_msg, state) do
+    {:ok, _} = Supervisor.start_child(ConsensusMemberSup, [{:join_existing_consensus_group, other_node_members}, name])
     {:noreply, state}
   end
 
@@ -121,7 +114,7 @@ defmodule RaftFleet.Manager do
           next_leader = Enum.random(members)
           :ok = RaftedValue.replace_leader(leader, next_leader)
           :timer.sleep(1_000)
-          :ok = RaftedValue.remove_follower(next_leader, Process.whereis(Cluster))
+          RaftedValue.remove_follower(next_leader, Process.whereis(Cluster))
       end
     else
       RaftedValue.remove_follower(leader, Process.whereis(Cluster))
