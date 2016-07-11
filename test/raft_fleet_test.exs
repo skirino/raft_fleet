@@ -50,8 +50,8 @@ defmodule RaftFleetTest do
   defp assert_flat_distribution(list, total) do
     assert Enum.sum(list) == total
     average = div(total, length(list))
-    assert Enum.min(list) >= div(average, 3)
-    assert Enum.max(list) <= average * 3
+    assert Enum.min(list) >= div(average, 4)
+    assert Enum.max(list) <= average * 4
   end
 
   defp with_consensus_groups_and_their_clients(f) do
@@ -64,7 +64,7 @@ defmodule RaftFleetTest do
     client_pids     = Enum.map(consensus_names, &start_consensus_group/1)
 
     # follower processes should automatically be spawned afterwards
-    :timer.sleep(7_100)
+    :timer.sleep(25_000)
     assert_members_well_distributed(@n_consensus_groups)
 
     f.()

@@ -79,8 +79,10 @@ defmodule RaftFleet.Manager do
   def handle_cast({:start_consensus_group_follower, name}, state) do
     if State.phase(state) == :active do
       other_node_members = Enum.map(Node.list, fn n -> {name, n} end)
-      # start_child/2 may fail due to `:uncommitted_membership_change`; just neglect the error here and let ConsensusMemberAdjuster retry this operation
-      Supervisor.start_child(ConsensusMemberSup, [{:join_existing_consensus_group, other_node_members}, name])
+      # `start_child/2` may fail due to `:uncommitted_membership_change`;
+      # just neglect the error here and let ConsensusMemberAdjuster retry this operation.
+      # In addition, to avoid blocking the Manager process indefinitely, we spawn a temporary process solely for `start_child/2`.
+      spawn_link(Supervisor, :start_child, [ConsensusMemberSup, [{:join_existing_consensus_group, other_node_members}, name]])
     end
     {:noreply, state}
   end

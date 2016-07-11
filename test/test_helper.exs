@@ -84,7 +84,13 @@ defmodule SlaveNode do
 
   def kill_all_consensus_members_in_local_node do
     Supervisor.which_children(ConsensusMemberSup)
-    |> Enum.each(fn {_, pid, _, _} -> :gen_fsm.stop(pid) end)
+    |> Enum.each(fn {_, pid, _, _} ->
+      try do
+        :gen_fsm.stop(pid)
+      catch
+        :exit, {:noproc, _} -> :ok # timing-dependent background cleanup
+      end
+    end)
   end
 
   def zone(node, n) do
