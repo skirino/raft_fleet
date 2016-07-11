@@ -23,6 +23,18 @@ defmodule RaftFleetTest do
     assert RaftFleet.deactivate                          |> at(node) == {:error, :inactive}
     assert RaftFleet.activate(zone_fun.(node))           |> at(node) == :ok
     assert RaftFleet.activate(zone_fun.(node))           |> at(node) == {:error, :activated}
+    wait_until_cluster_member_spawned(node, 5)
+  end
+
+  defp wait_until_cluster_member_spawned(_, 0), do: raise "Cluster member has not started!"
+  defp wait_until_cluster_member_spawned(node, tries_remaining) do
+    :timer.sleep(1_000)
+    try do
+      _ = RaftedValue.status({RaftFleet.Cluster, node})
+      :ok
+    catch
+      :exit, {:noproc, _} -> wait_until_cluster_member_spawned(node, tries_remaining - 1)
+    end
   end
 
   defp deactivate_node(node) do
@@ -30,8 +42,8 @@ defmodule RaftFleetTest do
     assert Process.alive?(pid)  |> at(node)
     assert RaftFleet.deactivate |> at(node) == :ok
     assert RaftFleet.deactivate |> at(node) == {:error, :inactive}
-    :timer.sleep(2_000)
-    refute Process.alive?(pid)  |> at(node)
+    Process.monitor(pid)
+    assert_receive({:DOWN, _monitor_ref, :process, ^pid, _reason}, 10_000)
   end
 
   defp kill_all_consensus_members_in_local_node do
@@ -100,7 +112,7 @@ defmodule RaftFleetTest do
     client_pids     = Enum.map(consensus_names, &start_consensus_group/1)
 
     # follower processes should automatically be spawned afterwards
-    :timer.sleep(6_100)
+    :timer.sleep(7_100)
     assert_members_well_distributed(@n_consensus_groups)
 
     f.()

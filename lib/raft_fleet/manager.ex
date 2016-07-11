@@ -3,7 +3,7 @@ alias Croma.TypeGen, as: TG
 
 defmodule RaftFleet.Manager do
   use GenServer
-  alias RaftFleet.{Cluster, ConsensusMemberSup, ConsensusMemberAdjuster, LeaderPidCache, Config}
+  alias RaftFleet.{Cluster, ConsensusMemberSup, ConsensusMemberAdjuster, Activator, Deactivator, Config}
 
   defmodule State do
     use Croma.Struct, fields: [
@@ -25,15 +25,13 @@ defmodule RaftFleet.Manager do
     if timer do
       {:reply, {:error, :activated}, state}
     else
-      {:ok, pid} = Supervisor.start_child(RaftFleet.Supervisor, Cluster.Server.child_spec)
-      {:ok, _} = RaftFleet.command(Cluster, {:add_node, Node.self, zone})
+      spawn_link(Activator, :activate, [zone])
       {:reply, :ok, start_timer(state)}
     end
   end
   def handle_call(:deactivate, _from, %State{timer: timer} = state) do
     if timer do
-      {:ok, _} = RaftFleet.command(Cluster, {:remove_node, Node.self})
-      terminate_cluster_consensus_member
+      spawn_link(Deactivator, :deactivate, [])
       {:reply, :ok, stop_timer(state)}
     else
       {:reply, {:error, :inactive}, state}
@@ -61,7 +59,8 @@ defmodule RaftFleet.Manager do
   end
   def handle_cast({:start_consensus_group_follower, name}, state) do
     other_node_members = Enum.map(Node.list, fn n -> {name, n} end)
-    {:ok, _} = Supervisor.start_child(ConsensusMemberSup, [{:join_existing_consensus_group, other_node_members}, name])
+    # start_child/2 may fail due to `:uncommitted_membership_change`; just neglect the error here and let ConsensusMemberAdjuster retry this operation
+    Supervisor.start_child(ConsensusMemberSup, [{:join_existing_consensus_group, other_node_members}, name])
     {:noreply, state}
   end
 
@@ -102,25 +101,6 @@ defmodule RaftFleet.Manager do
   defp stop_timer(%State{timer: timer} = state) do
     if timer, do: Process.cancel_timer(timer)
     %State{state | timer: nil}
-  end
-
-  defp terminate_cluster_consensus_member do
-    leader = LeaderPidCache.get(Cluster)
-    if node(leader) == Node.self do
-      status = RaftedValue.status(Cluster)
-      case List.delete(status[:members], leader) do
-        []      -> :ok
-        members ->
-          next_leader = Enum.random(members)
-          :ok = RaftedValue.replace_leader(leader, next_leader)
-          :timer.sleep(1_000)
-          RaftedValue.remove_follower(next_leader, Process.whereis(Cluster))
-      end
-    else
-      RaftedValue.remove_follower(leader, Process.whereis(Cluster))
-    end
-    :ok = Supervisor.terminate_child(RaftFleet.Supervisor, Cluster.Server)
-    :ok = Supervisor.delete_child(RaftFleet.Supervisor, Cluster.Server)
   end
 
   defun node_purge_candidate_changed(node_to_purge :: node) :: :ok do

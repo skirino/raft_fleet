@@ -178,7 +178,8 @@ defmodule RaftFleet do
     end
   end
 
-  defp find_leader(name) do
+  @doc false
+  def find_leader(name) do
     statuses =
       [Node.self | Node.list] |> Enum.map(fn node ->
         try do
