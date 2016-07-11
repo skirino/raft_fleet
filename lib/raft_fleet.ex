@@ -36,7 +36,7 @@ defmodule RaftFleet do
   Node activation by calling this function should be done after the node is fully connected to the other existing nodes;
   otherwise there is a possibility (although it is small) that the cluster forms partitioned subset of active nodes.
   """
-  defun activate(zone :: ZoneId.t) :: :ok | {:error, :activated} do
+  defun activate(zone :: ZoneId.t) :: :ok | {:error, :not_inactive} do
     GenServer.call(Manager, {:activate, zone})
   end
 

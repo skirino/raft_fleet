@@ -13,54 +13,6 @@ defmodule RaftFleetTest do
   @n_consensus_groups 100
   @rv_config          RaftedValue.make_config(RaftFleet.JustAnInt)
 
-  defp zone(node, n) do
-    i = Atom.to_string(node) |> String.split("@") |> hd |> String.to_integer |> rem(n)
-    "zone#{i}"
-  end
-
-  defp activate_node(node, zone_fun) do
-    assert Supervisor.which_children(ConsensusMemberSup) |> at(node) == []
-    assert RaftFleet.deactivate                          |> at(node) == {:error, :inactive}
-    assert RaftFleet.activate(zone_fun.(node))           |> at(node) == :ok
-    assert RaftFleet.activate(zone_fun.(node))           |> at(node) == {:error, :activated}
-    wait_until_cluster_member_spawned(node, 5)
-  end
-
-  defp wait_until_cluster_member_spawned(_, 0), do: raise "Cluster member has not started!"
-  defp wait_until_cluster_member_spawned(node, tries_remaining) do
-    :timer.sleep(1_000)
-    try do
-      _ = RaftedValue.status({RaftFleet.Cluster, node})
-      :ok
-    catch
-      :exit, {:noproc, _} -> wait_until_cluster_member_spawned(node, tries_remaining - 1)
-    end
-  end
-
-  defp deactivate_node(node) do
-    %{from: pid} = RaftedValue.status({RaftFleet.Cluster, node})
-    assert Process.alive?(pid)  |> at(node)
-    assert RaftFleet.deactivate |> at(node) == :ok
-    assert RaftFleet.deactivate |> at(node) == {:error, :inactive}
-    Process.monitor(pid)
-    assert_receive({:DOWN, _monitor_ref, :process, ^pid, _reason}, 10_000)
-  end
-
-  defp kill_all_consensus_members_in_local_node do
-    Supervisor.which_children(ConsensusMemberSup)
-    |> Enum.each(fn {_, pid, _, _} -> :gen_fsm.stop(pid) end)
-  end
-
-  defp with_active_nodes(nodes, zone_fun, f) do
-    try do
-      Enum.shuffle(nodes) |> Enum.each(&activate_node(&1, zone_fun))
-      f.()
-    after
-      Enum.shuffle(nodes) |> Enum.each(&deactivate_node/1)
-      kill_all_consensus_members_in_local_node
-    end
-  end
-
   defp start_consensus_group(name) do
     assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
     assert RaftFleet.add_consensus_group(name, 3, @rv_config) == {:error, :already_added}
