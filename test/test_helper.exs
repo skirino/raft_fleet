@@ -70,6 +70,17 @@ defmodule SlaveNode do
     assert RaftFleet.deactivate |> at(node) == {:error, :inactive}
     Process.monitor(pid)
     assert_receive({:DOWN, _monitor_ref, :process, ^pid, _reason}, 10_000)
+
+    if node == Node.self do
+      # Wait for worker process to exit (if any)
+      state = :sys.get_state(Manager)
+      [state.adjust_worker, state.activate_worker, state.deactivate_worker]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.each(fn pid ->
+        Process.monitor(pid)
+        assert_receive({:DOWN, _monitor_ref, :process, ^pid, _reason}, 10_000)
+      end)
+    end
   end
 
   def with_active_nodes(nodes, zone_fun, f) do
@@ -78,22 +89,7 @@ defmodule SlaveNode do
       f.()
     after
       Enum.shuffle(nodes) |> Enum.each(&deactivate_node/1)
-      kill_all_consensus_members_in_local_node
     end
-  end
-
-  def kill_all_consensus_members_in_local_node do
-    # Wait for worker process to exit (if any)
-    state = :sys.get_state(Manager)
-    [state.adjust_worker, state.activate_worker, state.deactivate_worker]
-    |> Enum.reject(&is_nil/1)
-    |> Enum.each(fn pid ->
-      Process.monitor(pid)
-      assert_receive({:DOWN, _monitor_ref, :process, ^pid, _reason}, 10_000)
-    end)
-
-    Supervisor.which_children(ConsensusMemberSup)
-    |> Enum.each(fn {_, pid, _, _} -> Process.exit(pid, :kill) end)
   end
 
   def zone(node, n) do

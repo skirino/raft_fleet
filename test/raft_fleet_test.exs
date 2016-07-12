@@ -10,6 +10,12 @@ defmodule RaftFleetTest do
     :ok
   end
 
+  setup do
+    # For clean testing we restart :raft_fleet
+    :ok = Application.stop(:raft_fleet)
+    :ok = Application.start(:raft_fleet)
+  end
+
   @n_consensus_groups 100
   @rv_config          RaftedValue.make_config(RaftFleet.JustAnInt)
 
@@ -144,7 +150,6 @@ defmodule RaftFleetTest do
 
     Enum.each(Node.list -- nodes1, &deactivate_node/1)
     Enum.each(node_names1 ++ node_names2, &stop_slave/1)
-    kill_all_consensus_members_in_local_node
   end
 
   Enum.filter(cluster_node_zone_configurations, fn {n_nodes, _} -> n_nodes >= 3 end) # at least 2 nodes are necessary after 1 node failure
@@ -174,7 +179,6 @@ defmodule RaftFleetTest do
 
     Enum.each([Node.self | Node.list], &deactivate_node/1)
     Enum.each(node_names -- [node_to_fail], &stop_slave/1)
-    kill_all_consensus_members_in_local_node
   end
 
   Enum.filter(cluster_node_zone_configurations, fn {n_nodes, _} -> n_nodes >= 3 end) # at least 2 nodes are necessary after 1 node failure
