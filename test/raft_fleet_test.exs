@@ -10,11 +10,6 @@ defmodule RaftFleetTest do
     :ok
   end
 
-  setup do
-    :ok = Application.stop(:raft_fleet)
-    :ok = Application.start(:raft_fleet)
-  end
-
   @n_consensus_groups 100
   @rv_config          RaftedValue.make_config(RaftFleet.JustAnInt)
 
