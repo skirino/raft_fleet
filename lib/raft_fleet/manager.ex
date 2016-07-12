@@ -29,13 +29,13 @@ defmodule RaftFleet.Manager do
   end
 
   def init(:ok) do
+    Process.flag(:trap_exit, true)
     {:ok, %State{}}
   end
 
   def handle_call({:activate, zone}, _from, state) do
     if State.phase(state) == :inactive do
-      {pid, _} = spawn_monitor(Activator, :activate, [zone])
-      new_state = %State{state | activate_worker: pid}
+      new_state = %State{state | activate_worker: spawn_link_monitor(Activator, :activate, [zone])}
       {:reply, :ok, new_state}
     else
       {:reply, {:error, :not_inactive}, state}
@@ -43,8 +43,7 @@ defmodule RaftFleet.Manager do
   end
   def handle_call(:deactivate, _from, state) do
     if State.phase(state) == :active do
-      {pid, _} = spawn_monitor(Deactivator, :deactivate, [])
-      new_state = %State{state | deactivate_worker: pid} |> stop_timer
+      new_state = %State{state | deactivate_worker: spawn_link_monitor(Deactivator, :deactivate, [])} |> stop_timer
       {:reply, :ok, new_state}
     else
       {:reply, {:error, :inactive}, state}
@@ -80,7 +79,7 @@ defmodule RaftFleet.Manager do
     if State.phase(state) == :active do
       other_node_members = Enum.map(Node.list, fn n -> {name, n} end)
       # `start_child/2` may fail due to `:uncommitted_membership_change`;
-      # just neglect the error here and let ConsensusMemberAdjuster retry this operation.
+      # just neglect the error here and let `ConsensusMemberAdjuster` retry this operation.
       # In addition, to avoid blocking the Manager process indefinitely, we spawn a temporary process solely for `start_child/2`.
       spawn_link(Supervisor, :start_child, [ConsensusMemberSup, [{:join_existing_consensus_group, other_node_members}, name]])
     end
@@ -92,8 +91,7 @@ defmodule RaftFleet.Manager do
       if worker do
         state # don't invoke multiple workers
       else
-        {pid, _} = spawn_monitor(ConsensusMemberAdjuster, :adjust, [])
-        %State{state | adjust_worker: pid}
+        %State{state | adjust_worker: spawn_link_monitor(ConsensusMemberAdjuster, :adjust, [])}
       end
     if State.phase(state) == :active do
       {:noreply, start_timer(new_state)}
@@ -101,10 +99,10 @@ defmodule RaftFleet.Manager do
       {:noreply, new_state}
     end
   end
-  def handle_info({:DOWN, _ref, :process, pid, :normal}, %State{activate_worker: pid} = state) do
+  def handle_info({:DOWN, _ref, :process, pid, _info}, %State{activate_worker: pid} = state) do
     {:noreply, start_timer(%State{state | activate_worker: nil})}
   end
-  def handle_info({:DOWN, _ref, :process, pid, :normal}, %State{deactivate_worker: pid} = state) do
+  def handle_info({:DOWN, _ref, :process, pid, _info}, %State{deactivate_worker: pid} = state) do
     {:noreply, %State{state | deactivate_worker: nil}}
   end
   def handle_info({:DOWN, _ref, :process, pid, _info}, %State{adjust_worker: pid} = state) do
@@ -134,6 +132,11 @@ defmodule RaftFleet.Manager do
   defp stop_timer(%State{adjust_timer: timer} = state) do
     if timer, do: Process.cancel_timer(timer)
     %State{state | adjust_timer: nil}
+  end
+
+  defp spawn_link_monitor(mod, fun, args) do
+    {pid, _} = Process.spawn(mod, fun, args, [:link, :monitor])
+    pid
   end
 
   defun node_purge_candidate_changed(node_to_purge :: node) :: :ok do
