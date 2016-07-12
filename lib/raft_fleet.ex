@@ -92,7 +92,7 @@ defmodule RaftFleet do
   The replicated value held by the group will be discarded.
   """
   defun remove_consensus_group(name :: g[atom]) :: :ok | {:error, :not_found} do
-    {:ok, ret} = RaftFleet.command(RaftFleet.Cluster, {:remove_group, name})
+    {:ok, ret} = command(RaftFleet.Cluster, {:remove_group, name})
     ret
   end
 
