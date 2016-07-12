@@ -74,14 +74,25 @@ defmodule RaftFleet do
                             n_replica :: g[pos_integer],
                             rv_config = %RaftedValue.Config{}) :: :ok | {:error, :already_added} do
     ref = make_ref
-    {:ok, ret} =
+    {:ok, {leader_node, ret}} =
       call_with_retry(RaftFleet.Cluster, @default_retry + 1, @default_retry_interval, fn pid ->
-        command_arg = {:add_group, name, n_replica, rv_config, node(pid)}
-        RaftedValue.command(pid, command_arg, @default_timeout, ref)
+        leader_node = node(pid)
+        command_arg = {:add_group, name, n_replica, rv_config, leader_node}
+        case RaftedValue.command(pid, command_arg, @default_timeout, ref) do
+          {:ok, r}        -> {:ok, {leader_node, r}}
+          {:error, _} = e -> e
+        end
       end)
     case ret do
-      {:ok, _nodes} -> :ok
-      error         -> error
+      {:ok, _nodes} ->
+        try do
+          GenServer.call({Manager, leader_node}, {:await_completion_of_adding_consensus_group, name})
+        catch
+          :exit, reason -> # Something went wrong! Try to rollback the added consensus group
+            remove_consensus_group(name)
+            {:error, reason}
+        end
+      error -> error
     end
   end
 

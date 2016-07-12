@@ -7,11 +7,12 @@ defmodule RaftFleet.Manager do
 
   defmodule State do
     use Croma.Struct, fields: [
-      adjust_timer:      TG.nilable(Croma.Reference),
-      adjust_worker:     TG.nilable(Croma.Pid),
-      activate_worker:   TG.nilable(Croma.Pid),
-      deactivate_worker: TG.nilable(Croma.Pid),
-      purge_wait_timer:  TG.nilable(Croma.Reference),
+      adjust_timer:                 TG.nilable(Croma.Reference),
+      adjust_worker:                TG.nilable(Croma.Pid),
+      activate_worker:              TG.nilable(Croma.Pid),
+      deactivate_worker:            TG.nilable(Croma.Pid),
+      purge_wait_timer:             TG.nilable(Croma.Reference),
+      being_added_consensus_groups: Croma.Map,
     ]
 
     def phase(%__MODULE__{adjust_timer: t, activate_worker: a, deactivate_worker: d}) do
@@ -30,7 +31,7 @@ defmodule RaftFleet.Manager do
 
   def init(:ok) do
     Process.flag(:trap_exit, true)
-    {:ok, %State{}}
+    {:ok, %State{being_added_consensus_groups: %{}}}
   end
 
   def handle_call({:activate, zone}, _from, state) do
@@ -45,6 +46,16 @@ defmodule RaftFleet.Manager do
     if State.phase(state) == :active do
       new_state = %State{state | deactivate_worker: spawn_link_monitor(Deactivator, :deactivate, [])} |> stop_timer
       {:reply, :ok, new_state}
+    else
+      {:reply, {:error, :inactive}, state}
+    end
+  end
+  def handle_call({:await_completion_of_adding_consensus_group, name}, from, %State{being_added_consensus_groups: gs} = state) do
+    if State.phase(state) in [:active, :activating] do
+      case gs[name] do
+        :leader_started -> {:reply, :ok, %State{state | being_added_consensus_groups: Map.delete(gs, name)}}
+        _               -> {:noreply, %State{state | being_added_consensus_groups: Map.put(gs, name, from)}}
+      end
     else
       {:reply, {:error, :inactive}, state}
     end
@@ -64,7 +75,7 @@ defmodule RaftFleet.Manager do
       {:noreply, state}
     end
   end
-  def handle_cast({:start_consensus_group_members, name, rv_config, member_nodes}, state) do
+  def handle_cast({:start_consensus_group_members, name, rv_config, member_nodes}, %State{being_added_consensus_groups: gs} = state) do
     if State.phase(state) in [:active, :activating] do
       # Spawn leader in this node (neglecting desired leader node defined by randezvous hashing) to avoid potential failures
       {:ok, _} = Supervisor.start_child(ConsensusMemberSup, [{:create_new_consensus_group, rv_config}, name])
@@ -72,8 +83,17 @@ defmodule RaftFleet.Manager do
       |> Enum.each(fn n ->
         start_consensus_group_follower(name, n)
       end)
+      new_gs =
+        case gs[name] do
+          {_, _} = from ->
+            GenServer.reply(from, :ok)
+            Map.delete(gs, name)
+          _ -> Map.put(gs, name, :leader_started)
+        end
+      {:noreply, %State{state | being_added_consensus_groups: new_gs}}
+    else
+      {:noreply, state}
     end
-    {:noreply, state}
   end
   def handle_cast({:start_consensus_group_follower, name}, state) do
     if State.phase(state) == :active do
