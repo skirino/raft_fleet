@@ -101,9 +101,20 @@ defmodule RaftFleet.Manager do
       # `start_child/2` may fail due to `:uncommitted_membership_change`;
       # just neglect the error here and let `ConsensusMemberAdjuster` retry this operation.
       # In addition, to avoid blocking the Manager process indefinitely, we spawn a temporary process solely for `start_child/2`.
-      spawn_link(Supervisor, :start_child, [ConsensusMemberSup, [{:join_existing_consensus_group, other_node_members}, name]])
+      spawn_link(fn -> start_follower_with_retry(other_node_members, name, 3) end)
     end
     {:noreply, state}
+  end
+
+  defp start_follower_with_retry(_, _, 0), do: {:error, :cannot_start_child}
+  defp start_follower_with_retry(other_node_members, name, tries_remaining) do
+    case Supervisor.start_child(ConsensusMemberSup, [{:join_existing_consensus_group, other_node_members}, name]) do
+      {:ok, pid}                        -> {:ok, pid}
+      {:error, {:already_started, pid}} -> {:ok, pid}
+      {:error, _}                       ->
+        :timer.sleep(500)
+        start_follower_with_retry(other_node_members, name, tries_remaining - 1)
+    end
   end
 
   def handle_info(:adjust_members, %State{adjust_worker: worker} = state) do

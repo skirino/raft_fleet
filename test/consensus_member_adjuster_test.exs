@@ -26,18 +26,18 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
     end)
   end
 
-  defp start_leader_and_followers(leader_node, follower_nodes) do
-    Manager.start_consensus_group_members(@group_name, @rv_config, []) |> at(leader_node)
+  defp start_leader_and_followers(leader_node, follower_nodes, group_name \\ @group_name) do
+    Manager.start_consensus_group_members(group_name, @rv_config, []) |> at(leader_node)
     Enum.each(follower_nodes, fn n ->
       :timer.sleep(100)
-      Manager.start_consensus_group_follower(@group_name, n)
+      Manager.start_consensus_group_follower(group_name, n)
     end)
     :timer.sleep(100)
   end
 
-  defp call_adjust_one_step do
+  defp call_adjust_one_step(group_name \\ @group_name) do
     desired_member_nodes = Enum.map([1, 2, 3], &i2node/1)
-    ConsensusMemberAdjuster.adjust_one_step([Node.self | Node.list], @group_name, desired_member_nodes)
+    ConsensusMemberAdjuster.adjust_one_step([Node.self | Node.list], group_name, desired_member_nodes)
     :timer.sleep(500)
   end
 
@@ -104,6 +104,34 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
       assert node(new_pid) == target_node
 
       kill_all_consensus_members
+    end)
+  end
+
+  test "adjust_one_step/3 should remove consensus group whose majority of members are definitely dead" do
+    with_active_slaves([:"2", :"3"], fn ->
+      # To avoid complication due to periodic adjustment process, we don't add_consensus_group here;
+      # for testing whether `:remove_group` is done, we look into Raft logs.
+      raft_log_includes_removal_of_group? = fn(group_name) ->
+        {_, state} = :sys.get_state(RaftFleet.Cluster)
+        Enum.any?(state.logs.map, &match?({i, {_term, i, :command, {_from, {:remove_group, ^group_name}, _ref}}}, &1))
+      end
+
+      exec = fn(target_nodes, group_name) ->
+        start_leader_and_followers(Node.self, Node.list, group_name)
+        refute raft_log_includes_removal_of_group?.(group_name)
+
+        Enum.each(target_nodes, fn n ->
+          pid = Process.whereis(group_name) |> at(n)
+          Process.exit(pid, :kill)
+        end)
+        :timer.sleep(2_000) # wait until the remaining leader (if any) steps down
+
+        call_adjust_one_step(group_name)
+        assert raft_log_includes_removal_of_group?.(group_name)
+      end
+
+      [Node.self | Node.list]                        |> exec.(:consensus_group_1)
+      [Node.self | Node.list] |> Enum.take_random(2) |> exec.(:consensus_group_2)
     end)
   end
 end

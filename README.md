@@ -16,4 +16,4 @@ Running multiple [Raft](https://raft.github.io/) consensus groups in a cluster o
     - automatic rebalancing on adding/removing nodes
 - Each consensus group leader is accessible using its registered name (which must be an atom)
     - Process IDs of consensus leaders are cached in a local ETS table
-- Uses [rafted_value](https://github.com/skirino/rafted_value) as a building block
+- [rafted_value](https://github.com/skirino/rafted_value) as a building block
