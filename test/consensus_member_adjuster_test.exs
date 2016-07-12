@@ -8,6 +8,12 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
     :ok
   end
 
+  setup do
+    # For clean testing we restart :raft_fleet
+    :ok = Application.stop(:raft_fleet)
+    :ok = Application.start(:raft_fleet)
+  end
+
   @group_name :consensus_group
   @rv_config  RaftedValue.make_config(RaftFleet.JustAnInt)
 
