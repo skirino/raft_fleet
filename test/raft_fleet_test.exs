@@ -6,7 +6,7 @@ defmodule RaftFleetTest do
   alias RaftFleet.ConsensusMemberSup
 
   setup_all do
-    Node.start(:"1", :shortnames)
+    Node.start(:"1", :shortnames) # Note that epmd is not automatically started by just executing `mix test`
     :ok
   end
 
