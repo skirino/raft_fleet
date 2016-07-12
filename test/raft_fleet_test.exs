@@ -10,12 +10,8 @@ defmodule RaftFleetTest do
     :ok
   end
 
-  setup do
-    :timer.sleep(1_000)
-  end
-
   @n_consensus_groups 100
-  @rv_config          RaftedValue.make_config(RaftFleet.JustAnInt)
+  @rv_config          RaftedValue.make_config(RaftFleet.JustAnInt, [max_retained_command_results: 1000])
 
   defp start_consensus_group(name) do
     assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
