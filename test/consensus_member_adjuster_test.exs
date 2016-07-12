@@ -86,7 +86,7 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
         target_node = hd(Node.list)
         target_pid  = Enum.find(members1, fn pid -> node(pid) == target_node end)
         Process.exit(target_pid, :kill)
-        :timer.sleep(2_000) # wait until the killed process is recognized by the consensus leader
+        :timer.sleep(2_000) # wait until the killed process is recognized as "unresponsive" by the consensus leader
 
         call_adjust_one_step
         %{members: members2} = RaftedValue.status(@group_name)

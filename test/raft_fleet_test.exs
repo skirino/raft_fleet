@@ -70,7 +70,7 @@ defmodule RaftFleetTest do
     client_pids     = Enum.map(consensus_names, &start_consensus_group/1)
 
     # follower processes should automatically be spawned afterwards
-    :timer.sleep(25_000)
+    :timer.sleep(15_000)
     assert_members_well_distributed(@n_consensus_groups)
 
     f.()
@@ -86,7 +86,7 @@ defmodule RaftFleetTest do
     end)
 
     # processes should be cleaned-up
-    :timer.sleep(2_100)
+    :timer.sleep(3_000)
     assert_members_well_distributed(0)
   end
 
@@ -137,13 +137,13 @@ defmodule RaftFleetTest do
       Enum.each(nodes2, &activate_node(&1, zone_fun))
 
       # after several adjustments consensus members should be re-distributed
-      :timer.sleep(25_100)
+      :timer.sleep(15_000)
       assert_members_well_distributed(@n_consensus_groups)
 
       # deactivate/remove nodes one by one; client should be able to interact with consensus leaders
       Enum.each(nodes1, fn n ->
         deactivate_node(n)
-        :timer.sleep(4_100)
+        :timer.sleep(5_000)
         assert_members_well_distributed(@n_consensus_groups)
       end)
     end)
@@ -168,7 +168,7 @@ defmodule RaftFleetTest do
 
     with_consensus_groups_and_their_clients(fn ->
       stop_slave(node_to_fail)
-      :timer.sleep(20_100)
+      :timer.sleep(15_000)
       assert_members_well_distributed(@n_consensus_groups)
 
       status = RaftedValue.status(RaftFleet.Cluster)
@@ -200,7 +200,7 @@ defmodule RaftFleetTest do
         :timer.sleep(1_000)
         target_pid = Process.whereis(RaftFleet.Cluster) |> at(Enum.random(all_nodes))
         Process.exit(target_pid, :kill)
-        :timer.sleep(10_000)
+        :timer.sleep(5_000)
 
         statuses =
           Enum.map(all_nodes, fn n ->

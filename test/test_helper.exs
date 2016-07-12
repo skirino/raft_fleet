@@ -50,16 +50,18 @@ defmodule SlaveNode do
 
   defp wait_for_activation(_, 0), do: raise "activation not completed!"
   defp wait_for_activation(node, tries_remaining) do
-    :timer.sleep(1_000)
     try do
       state = :sys.get_state({Manager, node})
       if Manager.State.phase(state) == :active do
         :ok
       else
+        :timer.sleep(1_000)
         wait_for_activation(node, tries_remaining - 1)
       end
     catch
-      :exit, {:noproc, _} -> wait_for_activation(node, tries_remaining - 1)
+      :exit, {:noproc, _} ->
+        :timer.sleep(1_000)
+        wait_for_activation(node, tries_remaining - 1)
     end
   end
 
