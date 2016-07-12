@@ -10,6 +10,10 @@ defmodule RaftFleetTest do
     :ok
   end
 
+  setup do
+    :timer.sleep(1_000)
+  end
+
   @n_consensus_groups 100
   @rv_config          RaftedValue.make_config(RaftFleet.JustAnInt)
 
