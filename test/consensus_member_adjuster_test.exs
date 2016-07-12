@@ -47,59 +47,63 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
     |> Enum.each(fn {_, pid, _, _} -> Process.exit(pid, :kill) end)
   end
 
-  test "adjust_one_step/3" do
-    with_slaves([:"2", :"3", :"4"], fn ->
+  defp with_active_slaves(shortnames, f) do
+    with_slaves(shortnames, fn ->
       with_active_nodes([Node.self | Node.list], &zone(&1, 1), fn ->
-        [
-          {[1]         , 2, 1},
-          {[1, 2]      , 3, 1},
-          {[1, 4]      , 3, 1},
-          {[1, 2, 4]   , 4, 1},
-          {[1, 2, 3, 4], 3, 1},
-          {[1, 2, 3]   , 3, 1},
-          {[2]         , 2, 2},
-          {[2, 3]      , 3, 2},
-          {[2, 3, 4]   , 4, 2},
-          {[2, 3, 1]   , 3, 1},
-          {[2, 3, 4, 1], 4, 1},
-          {[4, 1, 2, 3], 4, 1},
-        ]
-        |> Enum.each(fn {[leader_node | follower_nodes], n_expected, expected_leader_node} ->
-          start_leader_and_followers(i2node(leader_node), Enum.map(follower_nodes, &i2node/1))
-          call_adjust_one_step
-          assert length(consensus_members) == n_expected
-          assert RaftedValue.status({@group_name, i2node(expected_leader_node)})[:state_name] == :leader
+        f.()
+      end)
+    end)
+  end
 
-          kill_all_consensus_members
-        end)
+  test "adjust_one_step/3" do
+    with_active_slaves([:"2", :"3", :"4"], fn ->
+      [
+        {[1]         , 2, 1},
+        {[1, 2]      , 3, 1},
+        {[1, 4]      , 3, 1},
+        {[1, 2, 4]   , 4, 1},
+        {[1, 2, 3, 4], 3, 1},
+        {[1, 2, 3]   , 3, 1},
+        {[2]         , 2, 2},
+        {[2, 3]      , 3, 2},
+        {[2, 3, 4]   , 4, 2},
+        {[2, 3, 1]   , 3, 1},
+        {[2, 3, 4, 1], 4, 1},
+        {[4, 1, 2, 3], 4, 1},
+      ]
+      |> Enum.each(fn {[leader_node | follower_nodes], n_expected, expected_leader_node} ->
+        start_leader_and_followers(i2node(leader_node), Enum.map(follower_nodes, &i2node/1))
+        call_adjust_one_step
+        assert length(consensus_members) == n_expected
+        assert RaftedValue.status({@group_name, i2node(expected_leader_node)})[:state_name] == :leader
+
+        kill_all_consensus_members
       end)
     end)
   end
 
   test "adjust_one_step/3 should remove pid that is definitely dead" do
-    with_slaves([:"2", :"3"], fn ->
-      with_active_nodes([Node.self | Node.list], &zone(&1, 1), fn ->
-        start_leader_and_followers(Node.self, Node.list)
+    with_active_slaves([:"2", :"3"], fn ->
+      start_leader_and_followers(Node.self, Node.list)
 
-        %{members: members1} = RaftedValue.status(@group_name)
-        assert length(members1) == 3
-        target_node = hd(Node.list)
-        target_pid  = Enum.find(members1, fn pid -> node(pid) == target_node end)
-        Process.exit(target_pid, :kill)
-        :timer.sleep(2_000) # wait until the killed process is recognized as "unresponsive" by the consensus leader
+      %{members: members1} = RaftedValue.status(@group_name)
+      assert length(members1) == 3
+      target_node = hd(Node.list)
+      target_pid  = Enum.find(members1, fn pid -> node(pid) == target_node end)
+      Process.exit(target_pid, :kill)
+      :timer.sleep(2_000) # wait until the killed process is recognized as "unresponsive" by the consensus leader
 
-        call_adjust_one_step
-        %{members: members2} = RaftedValue.status(@group_name)
-        assert members2 == List.delete(members1, target_pid)
+      call_adjust_one_step
+      %{members: members2} = RaftedValue.status(@group_name)
+      assert members2 == List.delete(members1, target_pid)
 
-        call_adjust_one_step
-        %{members: members3} = RaftedValue.status(@group_name)
-        assert length(members3) == 3
-        [new_pid] = members3 -- members2
-        assert node(new_pid) == target_node
+      call_adjust_one_step
+      %{members: members3} = RaftedValue.status(@group_name)
+      assert length(members3) == 3
+      [new_pid] = members3 -- members2
+      assert node(new_pid) == target_node
 
-        kill_all_consensus_members
-      end)
+      kill_all_consensus_members
     end)
   end
 end
