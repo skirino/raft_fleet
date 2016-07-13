@@ -44,7 +44,7 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
   end
 
   defpt adjust_one_step(participating_nodes, group_name, [leader_node | follower_nodes] = desired_member_nodes) do
-    case try_status({group_name, leader_node}) do
+    case try_status(group_name) do
       %{state_name: :leader, from: pid, members: members, unresponsive_followers: unresponsive_pids} ->
         follower_nodes_from_leader = Enum.map(members, &node/1) |> List.delete(leader_node) |> Enum.sort
         cond do

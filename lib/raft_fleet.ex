@@ -105,9 +105,11 @@ defmodule RaftFleet do
   Note that calling `add_consensus_group/3` right after `remove_consensus_group/1` with the same `name`
   may lead to confusing situation since `remove_consensus_group/1` don't immediately terminate existing member processes.
   """
-  defun remove_consensus_group(name :: g[atom]) :: :ok | {:error, :not_found} do
-    {:ok, ret} = command(RaftFleet.Cluster, {:remove_group, name})
-    ret
+  defun remove_consensus_group(name :: g[atom]) :: :ok | {:error, :not_found | :no_leader} do
+    case command(RaftFleet.Cluster, {:remove_group, name}) do
+      {:ok, ret} -> ret
+      error      -> error
+    end
   end
 
   @doc """
