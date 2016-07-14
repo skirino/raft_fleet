@@ -6,12 +6,12 @@ defmodule RaftFleet.Mixfile do
   def project do
     [
       app:             :raft_fleet,
-      version:         "0.0.1",
+      version:         "0.1.0",
       elixir:          "~> 1.2",
       build_embedded:  Mix.env == :prod,
       start_permanent: Mix.env == :prod,
       deps:            deps,
-      description:     "",
+      description:     "A fleet of Raft consensus groups",
       package:         package,
       source_url:      @github_url,
       homepage_url:    @github_url,
@@ -42,7 +42,7 @@ defmodule RaftFleet.Mixfile do
       files:       ["lib", "mix.exs", "README.md", "LICENSE"],
       maintainers: ["Shunsuke Kirino"],
       licenses:    ["MIT"],
-      links:       %{"GitHub repository" => @github_url, "Doc" => "http://hexdocs.pm/raft_fleet/"},
+      links:       %{"GitHub repository" => @github_url},
     ]
   end
 end
