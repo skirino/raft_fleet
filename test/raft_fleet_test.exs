@@ -212,13 +212,26 @@ defmodule RaftFleetTest do
     end)
   end
 
-  test "active_nodes/0" do
-    catch_error RaftFleet.active_nodes # before activate/1
+  test "active_nodes/0 and consensus_groups/0" do
+    # before activate/1
+    catch_error RaftFleet.active_nodes
+    catch_error RaftFleet.consensus_groups
+
     with_slaves([:"2", :"3"], fn ->
       with_active_nodes([Node.self | Node.list], &zone(&1, 2), fn ->
         nodes = RaftFleet.active_nodes
         assert Map.keys(nodes) |> Enum.sort == ["zone0", "zone1"]
         assert Map.values(nodes) |> List.flatten |> Enum.sort == Enum.sort([Node.self | Node.list])
+
+        assert RaftFleet.consensus_groups                                == %{}
+        assert RaftFleet.add_consensus_group(:consensus1, 3, @rv_config) == :ok
+        assert RaftFleet.add_consensus_group(:consensus2, 3, @rv_config) == :ok
+        assert RaftFleet.add_consensus_group(:consensus3, 3, @rv_config) == :ok
+        assert RaftFleet.consensus_groups                                == %{consensus1: 3, consensus2: 3, consensus3: 3}
+        assert RaftFleet.remove_consensus_group(:consensus1)             == :ok
+        assert RaftFleet.remove_consensus_group(:consensus2)             == :ok
+        assert RaftFleet.remove_consensus_group(:consensus3)             == :ok
+        assert RaftFleet.consensus_groups                                == %{}
       end)
     end)
   end

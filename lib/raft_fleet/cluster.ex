@@ -194,8 +194,8 @@ defmodule RaftFleet.Cluster do
       participating_nodes = Enum.flat_map(nodes, fn {_z, ns} -> ns end)
       groups_led_by_the_node = Map.get(members,node, [])
       {participating_nodes, groups_led_by_the_node, CappedQueue.underlying_queue(removed)}
-    (%State{nodes_per_zone: nodes}, :active_nodes) ->
-      nodes
-    (_, _) -> {:error, :invalid_query} # For safety
+    (%State{nodes_per_zone: nodes}, :active_nodes)        -> nodes
+    (%State{consensus_groups: groups}, :consensus_groups) -> groups
+    (_, _)                                                -> {:error, :invalid_query} # For safety
   end
 end

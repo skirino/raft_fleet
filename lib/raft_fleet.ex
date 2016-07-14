@@ -56,8 +56,7 @@ defmodule RaftFleet do
 
   This function sends a query to a leader of the "cluster consensus group", which is managed internally by raft_fleet.
   The returned value is grouped by zone IDs which have been passed to `activate/1`.
-
-
+  This function exits if no active node exists in the cluster.
   """
   defun active_nodes :: %{ZoneId.t => [node]} do
     {:ok, ret} = RaftFleet.query(RaftFleet.Cluster, :active_nodes)
@@ -110,6 +109,18 @@ defmodule RaftFleet do
       {:ok, ret} -> ret
       error      -> error
     end
+  end
+
+  @doc """
+  Queries already registered consensus groups.
+
+  This function sends a query to a leader of the "cluster consensus group", which is managed internally by raft_fleet.
+  The returned value is a map whose keys and values are consensus group name and number of replicas of the group.
+  This function exits if no active node exists in the cluster.
+  """
+  defun consensus_groups :: %{atom => pos_integer} do
+    {:ok, ret} = RaftFleet.query(RaftFleet.Cluster, :consensus_groups)
+    ret
   end
 
   @doc """
