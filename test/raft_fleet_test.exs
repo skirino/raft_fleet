@@ -70,7 +70,7 @@ defmodule RaftFleetTest do
     client_pids     = Enum.map(consensus_names, &start_consensus_group/1)
 
     # follower processes should automatically be spawned afterwards
-    :timer.sleep(30_000)
+    :timer.sleep(10_000)
     assert_members_well_distributed(@n_consensus_groups)
 
     f.()
@@ -140,7 +140,7 @@ defmodule RaftFleetTest do
       :timer.sleep(15_000)
       assert_members_well_distributed(@n_consensus_groups)
 
-      # deactivate/remove nodes one by one; client should be able to interact with consensus leaders
+      # deactivate/remove nodes one by one; clients should be able to interact with consensus leaders
       Enum.each(nodes1, fn n ->
         deactivate_node(n)
         :timer.sleep(5_000)
