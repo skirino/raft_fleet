@@ -89,8 +89,7 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
 
   defp try_status(dest) do
     try do
-      # RaftedValue.status(dest)
-      :gen_fsm.sync_send_all_state_event(dest, :status, 500)
+      RaftedValue.status(dest)
     catch
       :exit, {reason, _} -> reason # :noproc, {:nodedown, node}, :timeout
     end
