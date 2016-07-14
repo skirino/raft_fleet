@@ -14,8 +14,7 @@ defmodule RaftFleet.Config do
       - The actual value used is obtained by `Application.get_env(:raft_fleet, :node_purge_threshold_failing_members, 2)`,
         i.e. nodes that have more than or equal to 3 failing Raft members are regarded as "unhealthy".
   - `:node_purge_failure_time_window`
-      - Duration of time to purge unhealthy node.
-        When a node remains "unhealthy" for longer than this time window, it is removed from the participating nodes
+      - When a node remains "unhealthy" for longer than this time window, it is removed from the participating nodes
         (that is, all activated nodes that host consensus members).
       - The actual value used is obtained by `Application.get_env(:raft_fleet, :node_purge_failure_time_window, 600_000)`,
         i.e. it defaults to 10 minutes.
