@@ -49,7 +49,7 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
         follower_nodes_from_leader = Enum.map(members, &node/1) |> List.delete(leader_node) |> Enum.sort
         cond do
           (nodes_to_be_added = follower_nodes -- follower_nodes_from_leader) != [] ->
-            Manager.start_consensus_group_follower(group_name, Enum.random(nodes_to_be_added))
+            Manager.start_consensus_group_follower(group_name, Enum.random(nodes_to_be_added), leader_node)
           (nodes_to_be_removed = follower_nodes_from_leader -- follower_nodes) != [] ->
             target_node = Enum.random(nodes_to_be_removed)
             target_pid  = Enum.find(members, fn m -> node(m) == target_node end)
@@ -78,7 +78,7 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
             # remove the group as a last resort (to prevent from repeatedly failing to add followers).
             RaftFleet.remove_consensus_group(group_name)
           (nodes_to_be_added = desired_member_nodes -- nodes_with_living_members) != [] ->
-            Manager.start_consensus_group_follower(group_name, Enum.random(nodes_to_be_added))
+            Manager.start_consensus_group_follower(group_name, Enum.random(nodes_to_be_added), nil)
           undesired_leader = find_undesired_leader(node_status_pairs, group_name) ->
             RaftedValue.replace_leader(undesired_leader, Process.whereis(group_name))
           true -> :ok

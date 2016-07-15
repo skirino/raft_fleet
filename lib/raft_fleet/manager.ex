@@ -79,10 +79,8 @@ defmodule RaftFleet.Manager do
     if State.phase(state) in [:active, :activating] do
       # Spawn leader in this node (neglecting desired leader node defined by randezvous hashing) to avoid potential failures
       {:ok, _} = Supervisor.start_child(ConsensusMemberSup, [{:create_new_consensus_group, rv_config}, name])
-      List.delete(member_nodes, Node.self) |> Enum.with_index |> Enum.each(fn {node, i} ->
-        # Newly-spawned processes may call each other (in `init/1`) and cause deadlock (which then blocks supervisors in the nodes for 5 seconds).
-        # To reduce risk of deadlock we slightly shift the timing to start followers
-        start_consensus_group_follower(name, node, i * 100)
+      List.delete(member_nodes, Node.self) |> Enum.each(fn node ->
+        start_consensus_group_follower(name, node, Node.self)
       end)
       new_gs =
         case gs[name] do
@@ -96,10 +94,15 @@ defmodule RaftFleet.Manager do
       {:noreply, state}
     end
   end
-  def handle_cast({:start_consensus_group_follower, name}, state) do
+  def handle_cast({:start_consensus_group_follower, name, leader_node_hint}, state) do
     if State.phase(state) == :active do
-      other_node_members = Enum.map(Node.list, fn n -> {name, n} end)
-      # To avoid blocking the Manager process indefinitely, we spawn a temporary process solely for `start_child/2`.
+      other_node_list =
+        case leader_node_hint do
+          nil  -> Node.list
+          node -> [node, List.delete(Node.list, node)] # reorder `Node.list` so that the new follower can find leader immediately
+        end
+      other_node_members = Enum.map(other_node_list, fn n -> {name, n} end)
+      # To avoid blocking the Manager process, we spawn a temporary process solely for `start_child/2`.
       spawn_link(fn -> start_follower_with_retry(other_node_members, name, 3) end)
     end
     {:noreply, state}
@@ -177,17 +180,7 @@ defmodule RaftFleet.Manager do
     GenServer.cast(__MODULE__, {:start_consensus_group_members, name, rv_config, member_nodes})
   end
 
-  defun start_consensus_group_follower(name :: atom, node :: node, delay :: non_neg_integer \\ 0) :: :ok do
-    do_cast = fn ->
-      GenServer.cast({__MODULE__, node}, {:start_consensus_group_follower, name})
-    end
-    if delay == 0 do
-      do_cast.()
-    else
-      spawn_link(fn ->
-        :timer.sleep(delay)
-        do_cast.()
-      end)
-    end
+  defun start_consensus_group_follower(name :: atom, node :: node, leader_node_hint :: nil | node) :: :ok do
+    GenServer.cast({__MODULE__, node}, {:start_consensus_group_follower, name, leader_node_hint})
   end
 end

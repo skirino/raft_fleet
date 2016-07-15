@@ -9,7 +9,7 @@ Running multiple [Raft](https://raft.github.io/) consensus groups in a cluster o
 [![Build Status](https://travis-ci.org/skirino/raft_fleet.svg)](https://travis-ci.org/skirino/raft_fleet)
 [![Coverage Status](https://coveralls.io/repos/github/skirino/raft_fleet/badge.svg?branch=master)](https://coveralls.io/github/skirino/raft_fleet?branch=master)
 
-## Design
+## Feature & Design
 
 - Scalable placement of processes for multiple Raft consensus groups
     - consensus member processes are distributed to ErlangVMs in a data center-aware way using [randezvous hashing](https://en.wikipedia.org/wiki/Rendezvous_hashing)

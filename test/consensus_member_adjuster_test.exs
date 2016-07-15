@@ -36,7 +36,7 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
     Manager.start_consensus_group_members(group_name, @rv_config, []) |> at(leader_node)
     Enum.each(follower_nodes, fn n ->
       :timer.sleep(100)
-      Manager.start_consensus_group_follower(group_name, n)
+      Manager.start_consensus_group_follower(group_name, n, leader_node)
     end)
     :timer.sleep(100)
   end
