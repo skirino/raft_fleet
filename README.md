@@ -1,6 +1,6 @@
 # RaftFleet
 
-Running multiple [Raft](https://raft.github.io/) consensus groups in a cluster of Erlang VMs
+Elixir library to run multiple [Raft](https://raft.github.io/) consensus groups in a cluster of Erlang VMs
 
 - [API Documentation](http://hexdocs.pm/raft_fleet/)
 - [Hex package information](https://hex.pm/packages/raft_fleet)
@@ -20,7 +20,7 @@ Running multiple [Raft](https://raft.github.io/) consensus groups in a cluster o
 
 ## Example
 
-Suppose we have 4 erlang nodes:
+Suppose we have a cluster of 4 erlang nodes:
 
 ```ex
 $ iex --sname 1 -S mix
@@ -36,7 +36,7 @@ $ iex --sname 4 -S mix
 iex(4@skirino-Manjaro)> Node.connect :"1@skirino-Manjaro"
 ```
 
-Load the following module in all nodes.
+Load the following module that implements `RaftedValue.Data` behaviour on all nodes in the cluster.
 
 ```ex
 defmodule JustAnInt do
@@ -84,4 +84,4 @@ iex(3@skirino-Manjaro)> RaftFleet.query(:consensus1, :get)
 {:ok, 1}
 ```
 
-Adding/removing nodes trigger rebalancing of consensus member processes.
+Adding/removing nodes triggers rebalancing of consensus member processes.
