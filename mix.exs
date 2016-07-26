@@ -6,7 +6,7 @@ defmodule RaftFleet.Mixfile do
   def project do
     [
       app:             :raft_fleet,
-      version:         "0.1.2",
+      version:         "0.1.3",
       elixir:          "~> 1.2",
       build_embedded:  Mix.env == :prod,
       start_permanent: Mix.env == :prod,
@@ -32,8 +32,7 @@ defmodule RaftFleet.Mixfile do
       {:rafted_value, "~> 0.1"},
       {:coverex     , "~> 1.4" , only: :test},
       {:dialyze     , "~> 0.2" , only: :dev },
-      {:earmark     , "~> 0.2" , only: :dev },
-      {:ex_doc      , "~> 0.12", only: :dev },
+      {:ex_doc      , "~> 0.13", only: :dev },
     ]
   end
 
