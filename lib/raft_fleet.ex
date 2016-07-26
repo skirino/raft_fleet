@@ -231,4 +231,14 @@ defmodule RaftFleet do
       pid_or_nil
     end
   end
+
+  @doc """
+  Tries to find the current leader of the consensus group specified by `name`.
+  """
+  defun whereis_leader(name :: g[atom]) :: nil | pid do
+    case LeaderPidCache.get(name) do
+      nil -> find_leader(name)
+      pid -> pid
+    end
+  end
 end

@@ -212,10 +212,11 @@ defmodule RaftFleetTest do
     end)
   end
 
-  test "active_nodes/0 and consensus_groups/0" do
+  test "active_nodes/0, consensus_groups/0 and whereis_leader/1" do
     # before activate/1
     catch_error RaftFleet.active_nodes
     catch_error RaftFleet.consensus_groups
+    assert      RaftFleet.whereis_leader(:consensus1) == nil
 
     with_slaves([:"2", :"3"], fn ->
       with_active_nodes([Node.self | Node.list], &zone(&1, 2), fn ->
@@ -232,6 +233,10 @@ defmodule RaftFleetTest do
         assert RaftFleet.remove_consensus_group(:consensus2)             == :ok
         assert RaftFleet.remove_consensus_group(:consensus3)             == :ok
         assert RaftFleet.consensus_groups                                == %{}
+
+        assert is_pid(RaftFleet.whereis_leader(:consensus1))
+        assert is_pid(RaftFleet.whereis_leader(:consensus2))
+        assert is_pid(RaftFleet.whereis_leader(:consensus3))
       end)
     end)
   end
