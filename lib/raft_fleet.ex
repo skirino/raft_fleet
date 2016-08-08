@@ -66,14 +66,15 @@ defmodule RaftFleet do
   @doc """
   Registers a new consensus group identified by `name`.
 
+  `name` is used as a registered name for member processes of the new consensus group.
   `n_replica` is the number of replicas (Raft member processes implemented as `RaftedValue.Server`).
   For explanation of `rv_config` see `RaftedValue.make_config/2`.
   """
   defun add_consensus_group(name      :: g[atom],
                             n_replica :: g[pos_integer],
-                            rv_config = %RaftedValue.Config{}) :: :ok | {:error, :already_added} do
+                            rv_config = %RaftedValue.Config{}) :: :ok | {:error, :already_added | :no_leader | any} do
     ref = make_ref
-    {:ok, {leader_node, ret}} =
+    call_result =
       call_with_retry(RaftFleet.Cluster, @default_retry + 1, @default_retry_interval, fn pid ->
         leader_node = node(pid)
         command_arg = {:add_group, name, n_replica, rv_config, leader_node}
@@ -82,8 +83,8 @@ defmodule RaftFleet do
           {:error, _} = e -> e
         end
       end)
-    case ret do
-      {:ok, _nodes} ->
+    case call_result do
+      {:ok, {leader_node, {:ok, _nodes}}} ->
         try do
           GenServer.call({Manager, leader_node}, {:await_completion_of_adding_consensus_group, name})
         catch
@@ -91,7 +92,8 @@ defmodule RaftFleet do
             remove_consensus_group(name)
             {:error, reason}
         end
-      error -> error
+      {:ok, {_leader_node, {:error, _reason} = e}} -> e
+      {:error, :no_leader} = e                     -> e
     end
   end
 
