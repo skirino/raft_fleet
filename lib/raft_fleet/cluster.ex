@@ -61,24 +61,34 @@ defmodule RaftFleet.Cluster do
       node_to_purge:                    TG.nilable(Croma.Atom),    # node that has too many unhealthy raft members
     ]
 
-    def add_group(%__MODULE__{nodes_per_zone: nodes, consensus_groups: groups, members_per_leader_node: members} = state, group, n_replica) do
+    def add_group(%__MODULE__{nodes_per_zone:                   nodes,
+                              consensus_groups:                 groups,
+                              recently_removed_consensus_names: removed,
+                              members_per_leader_node:          members} = state,
+                  group,
+                  n_replica) do
       if Map.has_key?(groups, group) do
         {{:error, :already_added}, state}
       else
         if Enum.empty?(nodes) do
           {{:error, :no_active_node}, state}
         else
-          new_groups = Map.put(groups, group, n_replica)
+          new_groups   = Map.put(groups, group, n_replica)
+          new_removed  = CappedQueue.filter(removed, &(&1 != group))
           [leader | _] = member_nodes = NodesPerZone.lrw_members(nodes, group, n_replica)
-          pair = {group, member_nodes}
-          new_members = Map.update(members, leader, [pair], &[pair | &1])
-          new_state = %__MODULE__{state | consensus_groups: new_groups, members_per_leader_node: new_members}
+          pair         = {group, member_nodes}
+          new_members  = Map.update(members, leader, [pair], &[pair | &1])
+          new_state    = %__MODULE__{state | consensus_groups: new_groups, recently_removed_consensus_names: new_removed, members_per_leader_node: new_members}
           {{:ok, member_nodes}, new_state}
         end
       end
     end
 
-    def remove_group(%__MODULE__{nodes_per_zone: nodes, consensus_groups: groups, recently_removed_consensus_names: removed, members_per_leader_node: members} = state, group) do
+    def remove_group(%__MODULE__{nodes_per_zone:                   nodes,
+                                 consensus_groups:                 groups,
+                                 recently_removed_consensus_names: removed,
+                                 members_per_leader_node:          members} = state,
+                     group) do
       if Map.has_key?(groups, group) do
         new_groups  = Map.delete(groups, group)
         new_removed = CappedQueue.enqueue(removed, group)
