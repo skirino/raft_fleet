@@ -8,7 +8,7 @@ defmodule RaftFleet do
   use Application
   alias Supervisor.Spec
   alias RaftedValue.Data
-  alias RaftFleet.{Manager, LeaderPidCache, ZoneId}
+  alias RaftFleet.{Cluster, Manager, LeaderPidCache, ZoneId}
 
   def start(_type, _args) do
     LeaderPidCache.init
@@ -59,7 +59,7 @@ defmodule RaftFleet do
   This function exits if no active node exists in the cluster.
   """
   defun active_nodes :: %{ZoneId.t => [node]} do
-    {:ok, ret} = RaftFleet.query(RaftFleet.Cluster, :active_nodes)
+    {:ok, ret} = RaftFleet.query(Cluster, :active_nodes)
     ret
   end
 
@@ -75,7 +75,7 @@ defmodule RaftFleet do
                             rv_config = %RaftedValue.Config{}) :: :ok | {:error, :already_added | :no_leader | any} do
     ref = make_ref
     call_result =
-      call_with_retry(RaftFleet.Cluster, @default_retry + 1, @default_retry_interval, fn pid ->
+      call_with_retry(Cluster, @default_retry + 1, @default_retry_interval, fn pid ->
         leader_node = node(pid)
         command_arg = {:add_group, name, n_replica, rv_config, leader_node}
         case RaftedValue.command(pid, command_arg, @default_timeout, ref) do
@@ -107,7 +107,7 @@ defmodule RaftFleet do
   may lead to confusing situation since `remove_consensus_group/1` don't immediately terminate existing member processes.
   """
   defun remove_consensus_group(name :: g[atom]) :: :ok | {:error, :not_found | :no_leader} do
-    case command(RaftFleet.Cluster, {:remove_group, name}) do
+    case command(Cluster, {:remove_group, name}) do
       {:ok, ret} -> ret
       error      -> error
     end
@@ -121,7 +121,7 @@ defmodule RaftFleet do
   This function exits if no active node exists in the cluster.
   """
   defun consensus_groups :: %{atom => pos_integer} do
-    {:ok, ret} = RaftFleet.query(RaftFleet.Cluster, :consensus_groups)
+    {:ok, ret} = RaftFleet.query(Cluster, :consensus_groups)
     ret
   end
 
