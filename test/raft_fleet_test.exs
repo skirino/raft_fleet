@@ -168,7 +168,7 @@ defmodule RaftFleetTest do
 
     with_consensus_groups_and_their_clients(fn ->
       stop_slave(node_to_fail)
-      :timer.sleep(15_000)
+      :timer.sleep(15_000) # members in `node_to_fail` are recognized as unhealthy, `node_purge_failure_time_window` elapses, then rebalances
       assert_members_well_distributed(@n_consensus_groups)
 
       status = RaftedValue.status(RaftFleet.Cluster)

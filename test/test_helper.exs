@@ -28,8 +28,8 @@ defmodule SlaveNode do
     nodes_before = Node.list
     {:ok, hostname} = :inet.gethostname
     {:ok, longname} = :slave.start_link(hostname, shortname)
-    true     = :code.set_path(:code.get_path)               |> at(longname)
-    {:ok, _} = :application.ensure_all_started(:raft_fleet) |> at(longname)
+    true     = :code.set_path(:code.get_path)              |> at(longname)
+    {:ok, _} = Application.ensure_all_started(:raft_fleet) |> at(longname)
     Enum.each(nodes_before, fn n ->
       Node.connect(n) |> at(longname)
     end)
