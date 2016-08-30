@@ -68,21 +68,16 @@ defmodule RaftFleet do
 
   `name` is used as a registered name for member processes of the new consensus group.
   `n_replica` is the number of replicas (Raft member processes implemented as `RaftedValue.Server`).
-  For explanation of `rv_config` see `RaftedValue.make_config/2`, except that `:communication_module` defaults to `RaftFleet.RemoteMessageGateway`.
+  For explanation of `rv_config` see `RaftedValue.make_config/2`.
   """
   defun add_consensus_group(name      :: g[atom],
                             n_replica :: g[pos_integer],
                             rv_config = %RaftedValue.Config{}) :: :ok | {:error, :already_added | :no_leader | any} do
     ref = make_ref
-    rv_config2 =
-      Map.update!(rv_config, :communication_module, fn
-        :gen_fsm -> RaftFleet.RemoteMessageGateway
-        module   -> module
-      end)
     call_result =
       call_with_retry(Cluster, @default_retry + 1, @default_retry_interval, fn pid ->
         leader_node = node(pid)
-        command_arg = {:add_group, name, n_replica, rv_config2, leader_node}
+        command_arg = {:add_group, name, n_replica, rv_config, leader_node}
         case RaftedValue.command(pid, command_arg, @default_timeout, ref) do
           {:ok, r}        -> {:ok, {leader_node, r}}
           {:error, _} = e -> e

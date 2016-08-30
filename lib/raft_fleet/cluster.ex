@@ -46,8 +46,7 @@ defmodule RaftFleet.Cluster do
 
     defun child_spec :: Supervisor.Spec.spec do
       alias RaftFleet.Cluster, as: C
-      opts = [leader_hook_module: C.Hook, communication_module: RaftFleet.RemoteMessageGateway, election_timeout_clock_drift_margin: 500]
-      rv_config = RaftedValue.make_config(C, opts)
+      rv_config = RaftedValue.make_config(C, [leader_hook_module: C.Hook, election_timeout_clock_drift_margin: 500])
       Supervisor.Spec.worker(__MODULE__, [rv_config, C], [restart: :transient])
     end
   end
