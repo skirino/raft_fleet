@@ -164,7 +164,6 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
           target_pid = Enum.random(targets)
           RaftedValue.remove_follower(leader_pid, target_pid)
         end
-      _ -> :ok
     end
   end
 end
