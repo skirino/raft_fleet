@@ -8,16 +8,21 @@ defmodule RaftFleet do
   use Application
   alias Supervisor.Spec
   alias RaftedValue.Data
-  alias RaftFleet.{Cluster, Manager, LeaderPidCache, ZoneId}
+  alias RaftFleet.{Cluster, Manager, LeaderPidCache, LeaderPidCacheRefresher, ZoneId, Util}
 
   def start(_type, _args) do
     LeaderPidCache.init
     children = [
       Spec.supervisor(RaftFleet.ConsensusMemberSup, []),
       Spec.worker(Manager, []),
+      Spec.worker(LeaderPidCacheRefresher, []),
     ]
     opts = [strategy: :one_for_one, name: RaftFleet.Supervisor]
     Supervisor.start_link(children, opts)
+  end
+
+  def stop(_state) do
+    :ets.delete(:raft_fleet_leader_pid_cache)
   end
 
   @default_timeout        500
@@ -184,7 +189,7 @@ defmodule RaftFleet do
         call_with_retry(name, tries_remaining - 1, retry_interval, f)
       end
       find_leader_and_exec = fn ->
-        case find_leader(name) do
+        case Util.find_leader_and_cache(name) do
           nil        -> retry.()
           leader_pid ->
             case run_with_catch.(leader_pid) do
@@ -207,39 +212,12 @@ defmodule RaftFleet do
     end
   end
 
-  @doc false
-  def find_leader(name) do
-    statuses =
-      [Node.self | Node.list] |> Enum.map(fn node ->
-        try do
-          RaftedValue.status({name, node})
-        catch
-          :exit, _ -> nil
-        end
-      end)
-      |> Enum.reject(&is_nil/1)
-    if Enum.empty?(statuses) do
-      nil
-    else
-      max_term = Enum.map(statuses, &(&1[:current_term])) |> Enum.max
-      pid_or_nil =
-        Enum.filter(statuses, &(&1[:current_term] == max_term))
-        |> Enum.map(&(&1[:leader]))
-        |> Enum.reject(&is_nil/1)
-        |> List.first
-      if pid_or_nil do
-        LeaderPidCache.set(name, pid_or_nil)
-      end
-      pid_or_nil
-    end
-  end
-
   @doc """
   Tries to find the current leader of the consensus group specified by `name`.
   """
   defun whereis_leader(name :: g[atom]) :: nil | pid do
     case LeaderPidCache.get(name) do
-      nil -> find_leader(name)
+      nil -> Util.find_leader_and_cache(name)
       pid -> pid
     end
   end

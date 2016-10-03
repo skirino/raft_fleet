@@ -1,7 +1,7 @@
 use Croma
 
 defmodule RaftFleet.Deactivator do
-  alias RaftFleet.{Cluster, LeaderPidCache}
+  alias RaftFleet.{Cluster, LeaderPidCache, Util}
 
   @tries            5
   @sleep            1_000
@@ -48,7 +48,7 @@ defmodule RaftFleet.Deactivator do
             :error
         end
       {:error, {:not_leader, nil}} ->
-        _current_leader = RaftFleet.find_leader(Cluster) # this line also calls LeaderPidCache.set/2 on success
+        _current_leader = Util.find_leader_and_cache(Cluster)
         :error
       {:error, {:not_leader, leader_hint}} ->
         LeaderPidCache.set(Cluster, leader_hint)

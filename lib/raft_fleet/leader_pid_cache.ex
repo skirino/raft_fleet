@@ -24,4 +24,18 @@ defmodule RaftFleet.LeaderPidCache do
     :ets.delete(@table_name, name)
     :ok
   end
+
+  defun keys :: [atom] do
+    case :ets.first(@table_name) do
+      :"$end_of_table" -> []
+      k                -> keys_impl(k, [k])
+    end
+  end
+
+  defp keys_impl(k, acc) do
+    case :ets.next(@table_name, k) do
+      :"$end_of_table" -> acc
+      k                -> keys_impl(k, [k | acc])
+    end
+  end
 end
