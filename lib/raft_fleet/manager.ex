@@ -30,13 +30,12 @@ defmodule RaftFleet.Manager do
   end
 
   def init(:ok) do
-    Process.flag(:trap_exit, true)
     {:ok, %State{being_added_consensus_groups: %{}}}
   end
 
   def handle_call({:activate, zone}, _from, state) do
     if State.phase(state) == :inactive do
-      new_state = %State{state | activate_worker: spawn_link_monitor(Activator, :activate, [zone])}
+      new_state = %State{state | activate_worker: start_worker(Activator, :activate, [zone])}
       {:reply, :ok, new_state}
     else
       {:reply, {:error, :not_inactive}, state}
@@ -44,7 +43,7 @@ defmodule RaftFleet.Manager do
   end
   def handle_call(:deactivate, _from, state) do
     if State.phase(state) == :active do
-      new_state = %State{state | deactivate_worker: spawn_link_monitor(Deactivator, :deactivate, [])} |> stop_timer
+      new_state = %State{state | deactivate_worker: start_worker(Deactivator, :deactivate, [])} |> stop_timer
       {:reply, :ok, new_state}
     else
       {:reply, {:error, :inactive}, state}
@@ -124,7 +123,7 @@ defmodule RaftFleet.Manager do
       if worker do
         state # don't invoke multiple workers
       else
-        %State{state | adjust_worker: spawn_link_monitor(ConsensusMemberAdjuster, :adjust, [])}
+        %State{state | adjust_worker: start_worker(ConsensusMemberAdjuster, :adjust, [])}
       end
     if State.phase(state) == :active do
       {:noreply, start_timer(new_state)}
@@ -167,8 +166,8 @@ defmodule RaftFleet.Manager do
     %State{state | adjust_timer: nil}
   end
 
-  defp spawn_link_monitor(mod, fun, args) do
-    {pid, _} = Process.spawn(mod, fun, args, [:link, :monitor])
+  defp start_worker(mod, fun, args) do
+    {pid, _} = spawn_monitor(mod, fun, args)
     pid
   end
 

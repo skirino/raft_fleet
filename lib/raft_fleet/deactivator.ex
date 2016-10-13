@@ -3,7 +3,7 @@ use Croma
 defmodule RaftFleet.Deactivator do
   alias RaftFleet.{Cluster, LeaderPidCache, Util}
 
-  @tries            5
+  @tries            10
   @sleep            1_000
   @deactivate_steps [
     :remove_node_command,
@@ -12,7 +12,7 @@ defmodule RaftFleet.Deactivator do
   ]
 
   def deactivate do
-    run_steps(@deactivate_steps, 10)
+    run_steps(@deactivate_steps, @tries)
   end
 
   defp run_steps(_, 0), do: raise "Failed to complete all steps of node deactivation!"
