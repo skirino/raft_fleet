@@ -41,9 +41,12 @@ defmodule RaftFleet.Deactivator do
         # member in this node is the current leader => should replace it with other member (if any)
         status = RaftedValue.status(Cluster)
         case List.delete(status[:members], leader) do
-          []      -> :ok
-          members ->
-            replace_leader(leader, members)
+          []            -> :ok
+          other_members ->
+            case pick_next_leader(leader, other_members) do
+              nil         -> nil # there are other members but they are in inactive nodes; nothing we can do except for waiting and retrying
+              next_leader -> replace_leader(leader, next_leader)
+            end
             :error
         end
       {:error, {:not_leader, nil}} ->
@@ -62,8 +65,17 @@ defmodule RaftFleet.Deactivator do
     :ok = Supervisor.delete_child(RaftFleet.Supervisor, Cluster.Server)
   end
 
-  defp replace_leader(leader, members) do
-    next_leader = Enum.random(members)
+  defp pick_next_leader(current_leader, other_members) do
+    # We don't want to migrate the current leader to an inactive node; check current active nodes before choosing a member.
+    {:ok, nodes_per_zone} = RaftedValue.query(current_leader, :active_nodes)
+    nodes = Map.values(nodes_per_zone) |> List.flatten |> MapSet.new
+    case Enum.filter(other_members, &(node(&1) in nodes)) do
+      []                      -> nil
+      members_in_active_nodes -> Enum.random(members_in_active_nodes)
+    end
+  end
+
+  defp replace_leader(leader, next_leader) do
     case RaftedValue.replace_leader(leader, next_leader) do
       :ok ->
         Logger.info("replaced current leader (#{inspect(leader)}) in this node with #{inspect(next_leader)} in #{node(next_leader)} to deactivate this node")
