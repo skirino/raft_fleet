@@ -131,13 +131,16 @@ defmodule RaftFleet.Manager do
       {:noreply, new_state}
     end
   end
-  def handle_info({:DOWN, _ref, :process, pid, _info}, %State{activate_worker: pid} = state) do
+  def handle_info({:DOWN, _ref, :process, pid, info}, %State{activate_worker: pid} = state) do
+    log_abnormal_exit_reason(info, :activate)
     {:noreply, start_timer(%State{state | activate_worker: nil})}
   end
-  def handle_info({:DOWN, _ref, :process, pid, _info}, %State{deactivate_worker: pid} = state) do
+  def handle_info({:DOWN, _ref, :process, pid, info}, %State{deactivate_worker: pid} = state) do
+    log_abnormal_exit_reason(info, :deactivate)
     {:noreply, %State{state | deactivate_worker: nil}}
   end
-  def handle_info({:DOWN, _ref, :process, pid, _info}, %State{adjust_worker: pid} = state) do
+  def handle_info({:DOWN, _ref, :process, pid, info}, %State{adjust_worker: pid} = state) do
+    log_abnormal_exit_reason(info, :adjust)
     {:noreply, %State{state | adjust_worker: nil}}
   end
   def handle_info({:purge_node, node}, state) do
@@ -169,6 +172,12 @@ defmodule RaftFleet.Manager do
   defp start_worker(mod, fun, args) do
     {pid, _} = spawn_monitor(mod, fun, args)
     pid
+  end
+
+  defp log_abnormal_exit_reason(:normal, _), do: :ok
+  defp log_abnormal_exit_reason(reason, worker_type) do
+    require Logger
+    Logger.error("#{worker_type} worker died unexpectedly: #{inspect(reason)}")
   end
 
   defun node_purge_candidate_changed(node_to_purge :: node) :: :ok do

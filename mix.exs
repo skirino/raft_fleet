@@ -21,7 +21,7 @@ defmodule RaftFleet.Mixfile do
 
   def application do
     [
-      applications: [:rafted_value],
+      applications: [:rafted_value, :logger],
       mod: {RaftFleet, []},
     ]
   end
