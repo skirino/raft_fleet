@@ -1,6 +1,7 @@
 use Croma
 
 defmodule RaftFleet.Deactivator do
+  require Logger
   alias RaftFleet.{Cluster, LeaderPidCache, Util}
 
   @tries            10
@@ -42,9 +43,7 @@ defmodule RaftFleet.Deactivator do
         case List.delete(status[:members], leader) do
           []      -> :ok
           members ->
-            next_leader = Enum.random(members)
-            RaftedValue.replace_leader(leader, next_leader)
-            LeaderPidCache.set(Cluster, next_leader)
+            replace_leader(leader, members)
             :error
         end
       {:error, {:not_leader, nil}} ->
@@ -53,11 +52,24 @@ defmodule RaftFleet.Deactivator do
       {:error, {:not_leader, leader_hint}} ->
         LeaderPidCache.set(Cluster, leader_hint)
         :error
-      {:error, _} -> :error
+      {:error, reason} ->
+        Logger.error("remove follower failed: #{inspect(reason)}")
+        :error
     end
   end
   defp step(:delete_child_from_supervisor) do
     :ok = Supervisor.terminate_child(RaftFleet.Supervisor, Cluster.Server)
     :ok = Supervisor.delete_child(RaftFleet.Supervisor, Cluster.Server)
+  end
+
+  defp replace_leader(leader, members) do
+    next_leader = Enum.random(members)
+    case RaftedValue.replace_leader(leader, next_leader) do
+      :ok ->
+        Logger.info("replaced current leader (#{inspect(leader)}) in this node with #{inspect(next_leader)} in #{node(next_leader)} to deactivate this node")
+        LeaderPidCache.set(Cluster, next_leader)
+      {:error, reason} ->
+        Logger.error("tried to replace current leader in this node but failed: #{inspect(reason)}")
+    end
   end
 end

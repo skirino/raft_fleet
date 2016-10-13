@@ -3,6 +3,7 @@ alias Croma.TypeGen, as: TG
 
 defmodule RaftFleet.Manager do
   use GenServer
+  require Logger
   alias RaftFleet.{Cluster, ConsensusMemberSup, ConsensusMemberAdjuster, Activator, Deactivator, Config}
 
   defmodule State do
@@ -147,9 +148,12 @@ defmodule RaftFleet.Manager do
     if State.phase(state) in [:active, :activating] do
       %{state_name: state_name, members: members} = RaftedValue.status(Cluster)
       if state_name == :leader do
+        Logger.info("purge node #{node} as too many members in the node are unresponsive")
         RaftedValue.command(Cluster, {:remove_node, node})
-        target_pid = Enum.find(members, fn pid -> node(pid) == node end)
-        RaftedValue.remove_follower(Cluster, target_pid)
+        case Enum.find(members, fn pid -> node(pid) == node end) do
+          nil        -> :ok
+          target_pid -> RaftedValue.remove_follower(Cluster, target_pid)
+        end
       end
       {:noreply, %State{state | purge_wait_timer: nil}}
     else
