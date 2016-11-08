@@ -34,30 +34,29 @@ defmodule RaftFleet.Deactivator do
     end
   end
   defp step(:remove_follower_from_cluster_consensus) do
-    leader = LeaderPidCache.get(Cluster)
-    case RaftedValue.remove_follower(leader, Process.whereis(Cluster)) do
-      :ok -> :ok
-      {:error, :cannot_remove_leader} ->
+    local_member = Process.whereis(Cluster)
+    case Util.find_leader_and_cache(Cluster) do
+      nil           -> :error
+      ^local_member ->
         # member in this node is the current leader => should replace it with other member (if any)
-        status = RaftedValue.status(Cluster)
-        case List.delete(status[:members], leader) do
+        status = RaftedValue.status(local_member)
+        case List.delete(status[:members], local_member) do
           []            -> :ok
           other_members ->
-            case pick_next_leader(leader, other_members) do
+            case pick_next_leader(local_member, other_members) do
               nil         -> nil # there are other members but they are in inactive nodes; nothing we can do except for waiting and retrying
-              next_leader -> replace_leader(leader, next_leader)
+              next_leader -> replace_leader(local_member, next_leader)
             end
             :error
         end
-      {:error, {:not_leader, nil}} ->
-        _current_leader = Util.find_leader_and_cache(Cluster)
-        :error
-      {:error, {:not_leader, leader_hint}} ->
-        LeaderPidCache.set(Cluster, leader_hint)
-        :error
-      {:error, reason} ->
-        Logger.error("remove follower failed: #{inspect(reason)}")
-        :error
+      current_leader ->
+        catch_exit(fn -> RaftedValue.remove_follower(current_leader, local_member) end)
+        |> case do
+          :ok              -> :ok
+          {:error, reason} ->
+            Logger.error("remove follower failed: #{inspect(reason)}")
+            :error
+        end
     end
   end
   defp step(:delete_child_from_supervisor) do
@@ -66,7 +65,7 @@ defmodule RaftFleet.Deactivator do
   end
 
   defp pick_next_leader(current_leader, other_members) do
-    # We don't want to migrate the current leader to an inactive node; check current active nodes before choosing a member.
+    # We don't want to migrate the current leader to an inactive node; check currently active nodes before choosing a member.
     {:ok, nodes_per_zone} = RaftedValue.query(current_leader, :active_nodes)
     nodes = Map.values(nodes_per_zone) |> List.flatten |> MapSet.new
     case Enum.filter(other_members, &(node(&1) in nodes)) do
@@ -76,12 +75,21 @@ defmodule RaftFleet.Deactivator do
   end
 
   defp replace_leader(leader, next_leader) do
-    case RaftedValue.replace_leader(leader, next_leader) do
+    catch_exit(fn -> RaftedValue.replace_leader(leader, next_leader) end)
+    |> case do
       :ok ->
         Logger.info("replaced current leader (#{inspect(leader)}) in this node with #{inspect(next_leader)} in #{node(next_leader)} to deactivate this node")
         LeaderPidCache.set(Cluster, next_leader)
       {:error, reason} ->
         Logger.error("tried to replace current leader in this node but failed: #{inspect(reason)}")
+    end
+  end
+
+  defp catch_exit(f) do
+    try do
+      f.()
+    catch
+      :exit, reason -> {:error, reason}
     end
   end
 end
