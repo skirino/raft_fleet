@@ -20,6 +20,9 @@ defmodule RaftFleet.LeaderPidCacheRefresher do
     refresh_all
     {:noreply, nil, Config.leader_pid_cache_refresh_interval}
   end
+  def handle_info(_delayed_reply, nil) do
+    {:noreply, nil, Config.leader_pid_cache_refresh_interval}
+  end
 
   defp refresh_all do
     cache_keys0 = LeaderPidCache.keys |> MapSet.new
@@ -33,10 +36,9 @@ defmodule RaftFleet.LeaderPidCacheRefresher do
       common_names     = MapSet.intersection(cache_keys, group_names)
       cache_only_names = MapSet.difference(cache_keys, group_names)
       non_cached_names = MapSet.difference(group_names, cache_keys)
-      # explicitly convert to list to suppress dialyzer warning due to opaque MapSet.t
-      MapSet.to_list(common_names    ) |> Enum.each(&confirm_leader_or_find(&1, nodes))
-      MapSet.to_list(cache_only_names) |> Enum.each(&LeaderPidCache.unset/1)
-      MapSet.to_list(non_cached_names) |> Enum.each(&Util.find_leader_and_cache/1)
+      Enum.each(common_names    , &confirm_leader_or_find(&1, nodes))
+      Enum.each(cache_only_names, &LeaderPidCache.unset/1)
+      Enum.each(non_cached_names, &Util.find_leader_and_cache/1)
     end
   end
 
