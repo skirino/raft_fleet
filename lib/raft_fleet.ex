@@ -78,7 +78,7 @@ defmodule RaftFleet do
   defun add_consensus_group(name      :: g[atom],
                             n_replica :: g[pos_integer],
                             rv_config = %RaftedValue.Config{}) :: :ok | {:error, :already_added | :no_leader | any} do
-    ref = make_ref
+    ref = make_ref()
     call_result =
       call_with_retry(Cluster, @default_retry + 1, @default_retry_interval, fn pid ->
         leader_node = node(pid)
@@ -151,7 +151,7 @@ defmodule RaftFleet do
                 timeout        :: g[pos_integer]     \\ @default_timeout,
                 retry          :: g[non_neg_integer] \\ @default_retry,
                 retry_interval :: g[pos_integer]     \\ @default_retry_interval) :: {:ok, Data.command_ret} | {:error, :no_leader} do
-    ref = make_ref
+    ref = make_ref()
     call_with_retry(name, retry + 1, retry_interval, fn pid ->
       RaftedValue.command(pid, command_arg, timeout, ref)
     end)

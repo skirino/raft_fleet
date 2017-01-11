@@ -66,7 +66,7 @@ defmodule RaftFleet.Manager do
       if ref1, do: Process.cancel_timer(ref1)
       ref2 =
         if node_to_purge do
-          Process.send_after(self, {:purge_node, node_to_purge}, Config.node_purge_failure_time_window)
+          Process.send_after(self(), {:purge_node, node_to_purge}, Config.node_purge_failure_time_window)
         else
           nil
         end
@@ -166,7 +166,7 @@ defmodule RaftFleet.Manager do
 
   defp start_timer(%State{adjust_timer: timer} = state) do
     if timer, do: Process.cancel_timer(timer)
-    %State{state | adjust_timer: Process.send_after(self, :adjust_members, Config.balancing_interval)}
+    %State{state | adjust_timer: Process.send_after(self(), :adjust_members, Config.balancing_interval)}
   end
   defp stop_timer(%State{adjust_timer: timer} = state) do
     if timer, do: Process.cancel_timer(timer)

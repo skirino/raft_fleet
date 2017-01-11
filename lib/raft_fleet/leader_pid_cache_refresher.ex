@@ -17,7 +17,7 @@ defmodule RaftFleet.LeaderPidCacheRefresher do
   end
 
   def handle_info(:timeout, nil) do
-    refresh_all
+    refresh_all()
     {:noreply, nil, Config.leader_pid_cache_refresh_interval}
   end
   def handle_info(_delayed_reply, nil) do

@@ -8,7 +8,7 @@ defmodule RaftFleet.Cluster do
     defun start_link(rv_config :: RaftedValue.Config.t, name :: g[atom]) :: GenServer.on_start do
       # Use lock facility provided by :global module to avoid race conditions
       result =
-        :global.trans({:raft_fleet_cluster_state_initialization, self}, fn ->
+        :global.trans({:raft_fleet_cluster_state_initialization, self()}, fn ->
           if !Enum.any?(Node.list, fn n -> rafted_value_server_alive?({name, n}) end) do
             RaftedValue.start_link({:create_new_consensus_group, rv_config}, name)
           end

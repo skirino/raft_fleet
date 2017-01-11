@@ -79,11 +79,11 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
       ]
       |> Enum.each(fn {[leader_node | follower_nodes], n_expected, expected_leader_node} ->
         start_leader_and_followers(i2node(leader_node), Enum.map(follower_nodes, &i2node/1))
-        call_adjust_one_step
-        assert length(consensus_members) == n_expected
+        call_adjust_one_step()
+        assert length(consensus_members()) == n_expected
         assert RaftedValue.status({@group_name, i2node(expected_leader_node)})[:state_name] == :leader
 
-        kill_all_consensus_members
+        kill_all_consensus_members()
       end)
     end)
   end
@@ -99,17 +99,17 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
       Process.exit(target_pid, :kill)
       :timer.sleep(2_000) # wait until the killed process is recognized as "unresponsive" by the consensus leader
 
-      call_adjust_one_step
+      call_adjust_one_step()
       %{members: members2} = RaftedValue.status(@group_name)
       assert members2 == List.delete(members1, target_pid)
 
-      call_adjust_one_step
+      call_adjust_one_step()
       %{members: members3} = RaftedValue.status(@group_name)
       assert length(members3) == 3
       [new_pid] = members3 -- members2
       assert node(new_pid) == target_node
 
-      kill_all_consensus_members
+      kill_all_consensus_members()
     end)
   end
 

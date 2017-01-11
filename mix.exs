@@ -6,13 +6,13 @@ defmodule RaftFleet.Mixfile do
   def project do
     [
       app:             :raft_fleet,
-      version:         "0.1.11",
+      version:         "0.1.12",
       elixir:          "~> 1.2",
       build_embedded:  Mix.env == :prod,
       start_permanent: Mix.env == :prod,
-      deps:            deps,
+      deps:            deps(),
       description:     "A fleet of Raft consensus groups",
-      package:         package,
+      package:         package(),
       source_url:      @github_url,
       homepage_url:    @github_url,
       test_coverage:   [tool: Coverex.Task, coveralls: true],
