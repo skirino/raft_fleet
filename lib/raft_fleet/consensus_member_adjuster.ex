@@ -8,10 +8,10 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
     case RaftFleet.query(Cluster, {:consensus_groups, Node.self}) do
       {:error, reason} ->
         Logger.info("querying all consensus groups failed: #{inspect(reason)}")
-      {:ok, {participating_nodes, groups, removed_groups_queue}} ->
+      {:ok, {_participating_nodes, groups, removed_groups_queue}} ->
         leader_pid = LeaderPidCache.get(Cluster)
         kill_members_of_removed_groups(removed_groups_queue)
-        adjust_consensus_member_sets(participating_nodes, groups)
+        adjust_consensus_member_sets(groups)
         if node(leader_pid) == Node.self do
           adjust_cluster_consensus_members(leader_pid)
         end
@@ -31,20 +31,20 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
     end
   end
 
-  defp adjust_consensus_member_sets(participating_nodes, groups) do
+  defp adjust_consensus_member_sets(groups) do
     unhealthy_members_counts =
-      Enum.flat_map(groups, fn group -> do_adjust(participating_nodes, group) end)
+      Enum.flat_map(groups, &do_adjust/1)
       |> Enum.reduce(%{}, fn(node, map) -> Map.update(map, node, 1, &(&1 + 1)) end)
     threshold = Config.node_purge_threshold_failing_members
     RaftFleet.command(Cluster, {:report_unhealthy_members, Node.self, unhealthy_members_counts, threshold})
   end
 
-  defp do_adjust(_, {_, []}), do: []
-  defp do_adjust(participating_nodes, {group_name, desired_member_nodes}) do
-    adjust_one_step(participating_nodes, group_name, desired_member_nodes)
+  defp do_adjust({_, []}), do: []
+  defp do_adjust({group_name, desired_member_nodes}) do
+    adjust_one_step(group_name, desired_member_nodes)
   end
 
-  defpt adjust_one_step(participating_nodes, group_name, [leader_node | follower_nodes] = desired_member_nodes) do
+  defpt adjust_one_step(group_name, [leader_node | follower_nodes] = desired_member_nodes) do
     case try_status(group_name) do
       %{state_name: :leader, from: pid, members: members, unresponsive_followers: unresponsive_pids} ->
         follower_nodes_from_leader = Enum.map(members, &node/1) |> List.delete(leader_node) |> Enum.sort
