@@ -67,21 +67,21 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
         end
         Enum.map(unresponsive_pids, &node/1)
       status_or_reason ->
-        node_with_status_or_reason_pairs0 =
-          List.delete(participating_nodes, leader_node)
-          |> Enum.map(fn n -> {n, try_status({group_name, n})} end)
-        node_with_status_or_reason_pairs = [{leader_node, status_or_reason} | node_with_status_or_reason_pairs0]
-        node_status_pairs = Enum.filter(node_with_status_or_reason_pairs, &match?({_, %{}}, &1))
-        nodes_with_living_members = Enum.map(node_status_pairs, fn {n, _} -> n end)
+        node_with_status_or_reason_pairs0 = Node.list |> Enum.map(fn n -> {n, try_status({group_name, n})} end)
+        node_with_status_or_reason_pairs  = [{leader_node, status_or_reason} | node_with_status_or_reason_pairs0]
+        {node_with_status_pairs, node_with_error_reason_pairs} = Enum.partition(node_with_status_or_reason_pairs, &match?({_, %{}}, &1))
+        nodes_with_living_members = Enum.map(node_with_status_pairs, &elem(&1, 0))
+        undesired_leader          = Enum.map(node_with_status_pairs, &elem(&1, 1)) |> find_leader_from_statuses()
         cond do
-          majority_of_members_definitely_died?(group_name, node_with_status_or_reason_pairs) ->
+          undesired_leader == nil and majority_of_members_definitely_died?(group_name, node_with_status_pairs, node_with_error_reason_pairs) ->
             # Something really bad happened to this consensus group and it's impossible to rescue the group to healthy state;
             # remove the group as a last resort (to prevent from repeatedly failing to add followers).
             Logger.error("majority of members in #{group_name} have failed; remove the group as a last resort")
             RaftFleet.remove_consensus_group(group_name)
           (nodes_to_be_added = desired_member_nodes -- nodes_with_living_members) != [] ->
             Manager.start_consensus_group_follower(group_name, Enum.random(nodes_to_be_added), nil)
-          undesired_leader = find_undesired_leader(node_status_pairs, group_name) ->
+          undesired_leader != nil ->
+            # As the previous cond branch doesn't match, there must be a member process in this node; replace the leader
             Logger.info("migrating leader of #{group_name} in #{node(undesired_leader)} to the member in this node")
             RaftedValue.replace_leader(undesired_leader, Process.whereis(group_name))
           true -> :ok
@@ -98,50 +98,31 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
     end
   end
 
-  defp majority_of_members_definitely_died?(group_name, node_with_status_or_reason_pairs) do
-    if majority_of_members_absent?(node_with_status_or_reason_pairs) do
+  defp majority_of_members_definitely_died?(group_name, node_with_status_pairs, node_with_error_reason_pairs) do
+    if majority_of_members_absent?(node_with_status_pairs, node_with_error_reason_pairs) do
       # Confirm that it's actually the case after sleep, in order to exclude the situation where the consensus group is just being added.
       :timer.sleep(5_000)
-      node_with_status_or_reason_pairs_after_sleep =
-        Enum.map(node_with_status_or_reason_pairs, fn {n, _} -> {n, try_status({group_name, n})} end)
-      majority_of_members_absent?(node_with_status_or_reason_pairs_after_sleep)
+      all_nodes = (node_with_status_pairs ++ node_with_error_reason_pairs) |> Enum.map(&elem(&1, 0))
+      {node_with_status_pairs_after_sleep, node_with_error_reason_pairs_after_sleep} =
+        Enum.map(all_nodes, fn n -> {n, try_status({group_name, n})} end)
+        |> Enum.partition(&match?({_, %{}}, &1))
+      majority_of_members_absent?(node_with_status_pairs_after_sleep, node_with_error_reason_pairs_after_sleep)
     else
       false
     end
   end
 
-  defp majority_of_members_absent?(node_with_status_or_reason_pairs) do
-    if Enum.any?(node_with_status_or_reason_pairs, fn {_, s} -> !is_map(s) and s != :noproc end) do
+  defp majority_of_members_absent?(node_with_status_pairs, node_with_error_reason_pairs) do
+    if Enum.all?(node_with_error_reason_pairs, &match?({_, :noproc}, &1)) do
+      noproc_nodes = Enum.map(node_with_error_reason_pairs, &elem(&1, 0))
+      Enum.all?(node_with_status_pairs, fn {_, %{members: members}} ->
+        member_nodes = Enum.map(members, &node/1) |> Enum.uniq()
+        n_living_members = length(member_nodes -- noproc_nodes)
+        2 * n_living_members <= length(members)
+      end)
+    else
       # There's at least one node whose member status is unclear; be conservative and don't try to remove consensus group
       false
-    else
-      noproc_nodes = Enum.filter_map(node_with_status_or_reason_pairs, &match?({_, :noproc}, &1), &elem(&1, 0))
-      Enum.filter_map(node_with_status_or_reason_pairs, &match?({_, %{}}, &1), fn {_, %{members: ms}} -> ms end)
-      |> Enum.all?(fn members ->
-        member_nodes = Enum.map(members, &node/1)
-        n_members        = length(members)
-        n_living_members = length(Enum.uniq(member_nodes) -- noproc_nodes)
-        2 * n_living_members <= n_members
-      end)
-    end
-  end
-
-  defp find_undesired_leader(pairs, group_name) do
-    statuses = Enum.map(pairs, fn {_, s} -> s end)
-    case find_leader_from_statuses(statuses) do
-      nil ->
-        # No leader found in participating nodes.
-        # However there may be a leader in already-deactivated nodes; try them
-        statuses_not_participating =
-          (Node.list -- Enum.map(pairs, fn {n, _} -> n end))
-          |> Enum.map(fn n -> try_status({group_name, n}) end)
-          |> Enum.filter(&is_map/1)
-        if Enum.empty?(statuses_not_participating) do
-          nil
-        else
-          find_leader_from_statuses(statuses_not_participating ++ statuses) # use all statuses in order to exclude stale leader
-        end
-      pid -> pid
     end
   end
 

@@ -140,4 +140,22 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
       [Node.self | Node.list] |> Enum.take_random(2) |> exec.(:consensus_group_2)
     end)
   end
+
+  test "adjust_one_step/3 should find out members in deactivated-but-still-connected nodes and migrate them to active nodes" do
+    with_active_slaves([:"2", :"3", :"4", :"5", :"6"], fn ->
+      nodes_half1 = Enum.map([1, 2, 3], &i2node/1)
+      nodes_half2 = Enum.map([4, 5, 6], &i2node/1)
+      start_leader_and_followers(hd(nodes_half2), tl(nodes_half2))
+
+      # Simulate that `nodes_half2` are deactivated at this point; only `nodes_half1` are participating now
+      Enum.each(1..7, fn _ ->
+        ConsensusMemberAdjuster.adjust_one_step(nodes_half1, @group_name, nodes_half1)
+        :timer.sleep(500)
+      end)
+      :timer.sleep(500)
+
+      nodes_with_members2 = consensus_members() |> Enum.map(&node/1)
+      assert Enum.sort(nodes_with_members2) == Enum.sort(nodes_half1)
+    end)
+  end
 end
