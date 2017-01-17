@@ -16,12 +16,9 @@ defmodule SlaveNode do
   end
 
   def with_slaves(shortnames, f) do
-    try do
-      Enum.each(shortnames, &start_slave/1)
-      f.()
-    after
-      Enum.each(shortnames, &stop_slave/1)
-    end
+    Enum.each(shortnames, &start_slave/1)
+    f.()
+    Enum.each(shortnames, &stop_slave/1)
   end
 
   def start_slave(shortname) do
@@ -66,7 +63,15 @@ defmodule SlaveNode do
   end
 
   def deactivate_node(node) do
-    %{from: pid} = RaftedValue.status({RaftFleet.Cluster, node})
+    %{from: pid} =
+      try do
+        RaftedValue.status({RaftFleet.Cluster, node})
+      catch
+        :exit, _ ->
+          # retry once again
+          :timer.sleep(5_000)
+          RaftedValue.status({RaftFleet.Cluster, node})
+      end
     assert Process.alive?(pid)  |> at(node)
     assert RaftFleet.deactivate |> at(node) == :ok
     assert RaftFleet.deactivate |> at(node) == {:error, :inactive}
@@ -86,12 +91,9 @@ defmodule SlaveNode do
   end
 
   def with_active_nodes(nodes, zone_fun, f) do
-    try do
-      Enum.shuffle(nodes) |> Enum.each(&activate_node(&1, zone_fun))
-      f.()
-    after
-      Enum.shuffle(nodes) |> Enum.each(&deactivate_node/1)
-    end
+    Enum.shuffle(nodes) |> Enum.each(&activate_node(&1, zone_fun))
+    f.()
+    Enum.shuffle(nodes) |> Enum.each(&deactivate_node/1)
   end
 
   def zone(node, n) do

@@ -1,6 +1,6 @@
 %{"certifi": {:hex, :certifi, "0.7.0", "861a57f3808f7eb0c2d1802afeaae0fa5de813b0df0979153cbafcd853ababaf", [:rebar3], []},
   "chash": {:hex, :chash, "0.1.1", "ab209e4985c7bedba6e9f7b1412586a42ebcd0cb3b29cdcf2605ec605fd1a7df", [:rebar3], []},
-  "coverex": {:hex, :coverex, "1.4.11", "fb963586be173e0e5253b200ca624e2708ed5dbe58b90ddbed27184a1f46d61e", [:mix], [{:hackney, "~> 1.5", [hex: :hackney, optional: false]}, {:poison, "~> 1.5 or ~> 2.0", [hex: :poison, optional: false]}]},
+  "coverex": {:hex, :coverex, "1.4.12", "b18d737734edeac578a854cfaa5aa48c5d05e649c77ce02efb7f723a316b6a3b", [:mix], [{:hackney, "~> 1.5", [hex: :hackney, optional: false]}, {:poison, "~> 1.5 or ~> 2.0", [hex: :poison, optional: false]}]},
   "croma": {:hex, :croma, "0.5.1", "dfa32d8b3bcd9fe3c7444842cc190ad0520a3b66c7cc1d1d62d3892320c297fb", [:mix], []},
   "dialyze": {:hex, :dialyze, "0.2.1", "9fb71767f96649020d769db7cbd7290059daff23707d6e851e206b1fdfa92f9d", [], []},
   "earmark": {:hex, :earmark, "1.0.3", "89bdbaf2aca8bbb5c97d8b3b55c5dd0cff517ecc78d417e87f1d0982e514557b", [:mix], []},

@@ -121,7 +121,8 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
         2 * n_living_members <= length(members)
       end)
     else
-      # There's at least one node whose member status is unclear; be conservative and don't try to remove consensus group
+      # There's at least one node whose member status is unclear; the consensus members may reside in the other side of netsplit.
+      # Be conservative and don't try to remove consensus group
       false
     end
   end
