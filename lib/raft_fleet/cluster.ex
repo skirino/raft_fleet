@@ -202,7 +202,7 @@ defmodule RaftFleet.Cluster do
   defun query(data :: t, arg :: Data.query_arg) :: Data.query_ret do
     (%State{nodes_per_zone: nodes, members_per_leader_node: members, recently_removed_consensus_names: removed}, {:consensus_groups, node}) ->
       participating_nodes = Enum.flat_map(nodes, fn {_z, ns} -> ns end)
-      groups_led_by_the_node = Map.get(members,node, [])
+      groups_led_by_the_node = Map.get(members, node, [])
       {participating_nodes, groups_led_by_the_node, CappedQueue.underlying_queue(removed)}
     (%State{nodes_per_zone: nodes}, :active_nodes)        -> nodes
     (%State{consensus_groups: groups}, :consensus_groups) -> groups

@@ -43,7 +43,7 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
 
   defp call_adjust_one_step(group_name \\ @group_name) do
     desired_member_nodes = Enum.map([1, 2, 3], &i2node/1)
-    ConsensusMemberAdjuster.adjust_one_step(group_name, desired_member_nodes)
+    ConsensusMemberAdjuster.adjust_one_step([Node.self | Node.list], group_name, desired_member_nodes)
     :timer.sleep(500)
   end
 
@@ -61,7 +61,7 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
     end)
   end
 
-  test "adjust_one_step/2" do
+  test "adjust_one_step/3" do
     with_active_slaves([:"2", :"3", :"4"], fn ->
       [
         {[1]         , 2, 1},
@@ -88,7 +88,7 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
     end)
   end
 
-  test "adjust_one_step/2 should remove pid that is definitely dead" do
+  test "adjust_one_step/3 should remove pid that is definitely dead" do
     with_active_slaves([:"2", :"3"], fn ->
       start_leader_and_followers(Node.self, Node.list)
 
@@ -113,7 +113,7 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
     end)
   end
 
-  test "adjust_one_step/2 should remove consensus group whose majority of members are definitely dead" do
+  test "adjust_one_step/3 should remove consensus group whose majority of members are definitely dead" do
     with_active_slaves([:"2", :"3"], fn ->
       # To avoid complication due to periodic adjustment process, we don't add_consensus_group here;
       # for testing whether `:remove_group` is done, we look into Raft logs.
@@ -141,7 +141,7 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
     end)
   end
 
-  test "adjust_one_step/2 should find out members in deactivated-but-still-connected nodes and migrate them to active nodes" do
+  test "adjust_one_step/3 should find out members in deactivated-but-still-connected nodes and migrate them to active nodes" do
     with_active_slaves([:"2", :"3", :"4", :"5", :"6"], fn ->
       nodes_half1 = Enum.map([1, 2, 3], &i2node/1)
       nodes_half2 = Enum.map([4, 5, 6], &i2node/1)
@@ -149,7 +149,7 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
 
       # Simulate that `nodes_half2` are deactivated at this point; only `nodes_half1` are participating now
       Enum.each(1..7, fn _ ->
-        ConsensusMemberAdjuster.adjust_one_step(@group_name, nodes_half1)
+        ConsensusMemberAdjuster.adjust_one_step(nodes_half1, @group_name, nodes_half1)
         :timer.sleep(500)
       end)
       :timer.sleep(500)
