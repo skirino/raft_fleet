@@ -99,7 +99,7 @@ defmodule RaftFleet.Manager do
       other_node_list =
         case leader_node_hint do
           nil  -> Node.list
-          node -> [node, List.delete(Node.list, node)] # reorder `Node.list` so that the new follower can find leader immediately
+          node -> [node | List.delete(Node.list, node)] # reorder `Node.list` so that the new follower can find leader immediately
         end
       other_node_members = Enum.map(other_node_list, fn n -> {name, n} end)
       # To avoid blocking the Manager process, we spawn a temporary process solely for `start_child/2`.
