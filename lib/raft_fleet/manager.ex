@@ -79,8 +79,14 @@ defmodule RaftFleet.Manager do
     if State.phase(state) in [:active, :activating] do
       # Spawn leader in this node (neglecting desired leader node defined by randezvous hashing) to avoid potential failures
       {:ok, _} = Supervisor.start_child(ConsensusMemberSup, [{:create_new_consensus_group, rv_config}, name])
-      List.delete(member_nodes, Node.self) |> Enum.each(fn node ->
-        start_consensus_group_follower(name, node, Node.self)
+      # Concurrently spawning multiple followers may lead to race conditions,
+      # as adding a follower can only be done if no `uncommitted_membership_change` exists in the target consensus group.
+      # Although this race condition can be automatically resolved by retries and thus is harmless,
+      # we try to avoid it by waiting for a while for each follower, in order to reduce unnecessary crash logs.
+      List.delete(member_nodes, Node.self)
+      |> Enum.with_index
+      |> Enum.each(fn {node, i} ->
+        start_consensus_group_follower(name, node, Node.self, i * 100)
       end)
       new_gs =
         case gs[name] do
@@ -192,7 +198,18 @@ defmodule RaftFleet.Manager do
     GenServer.cast(__MODULE__, {:start_consensus_group_members, name, rv_config, member_nodes})
   end
 
-  defun start_consensus_group_follower(name :: atom, node :: node, leader_node_hint :: nil | node) :: :ok do
-    GenServer.cast({__MODULE__, node}, {:start_consensus_group_follower, name, leader_node_hint})
+  defun start_consensus_group_follower(name :: atom, node :: node, leader_node_hint :: nil | node, delay :: non_neg_integer \\ 0) :: :ok do
+    send_fun = fn ->
+      GenServer.cast({__MODULE__, node}, {:start_consensus_group_follower, name, leader_node_hint})
+    end
+    if delay == 0 do
+      send_fun.()
+    else
+      spawn(fn ->
+        :timer.sleep(delay)
+        send_fun.()
+      end)
+    end
+    :ok
   end
 end
