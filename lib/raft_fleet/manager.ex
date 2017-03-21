@@ -78,25 +78,34 @@ defmodule RaftFleet.Manager do
   def handle_cast({:start_consensus_group_members, name, rv_config, member_nodes}, %State{being_added_consensus_groups: gs} = state) do
     if State.phase(state) in [:active, :activating] do
       # Spawn leader in this node (neglecting desired leader node defined by randezvous hashing) to avoid potential failures
-      {:ok, _} = Supervisor.start_child(ConsensusMemberSup, [{:create_new_consensus_group, rv_config}, name])
-      # Concurrently spawning multiple followers may lead to race conditions,
-      # as adding a follower can only be done if no `uncommitted_membership_change` exists in the target consensus group.
-      # Although this race condition can be automatically resolved by retries and thus is harmless,
-      # we try to avoid it by waiting for a while for each follower, in order to reduce unnecessary crash logs.
-      List.delete(member_nodes, Node.self)
-      |> Enum.with_index
-      |> Enum.each(fn {node, i} ->
-        start_consensus_group_follower(name, node, Node.self, i * 100)
-      end)
-      new_gs =
-        case gs[name] do
-          {_, _} = from ->
-            GenServer.reply(from, :ok)
-            Map.delete(gs, name)
-          _ -> Map.put(gs, name, :leader_started)
-        end
-      {:noreply, %State{state | being_added_consensus_groups: new_gs}}
+      additional_args = [{:create_new_consensus_group, rv_config}, name]
+      case Supervisor.start_child(ConsensusMemberSup, additional_args) do
+        {:ok, _pid} ->
+          # Concurrently spawning multiple followers may lead to race conditions,
+          # as adding a follower can only be done if no `uncommitted_membership_change` exists in the target consensus group.
+          # Although this race condition can be automatically resolved by retries and thus is harmless,
+          # we try to avoid it by waiting for a while for each follower, in order to reduce unnecessary crash logs.
+          List.delete(member_nodes, Node.self)
+          |> Enum.with_index
+          |> Enum.each(fn {node, i} ->
+            start_consensus_group_follower(name, node, Node.self, i * 100)
+          end)
+          new_gs =
+            case gs[name] do
+              {_, _} = from ->
+                GenServer.reply(from, :ok)
+                Map.delete(gs, name)
+              _ -> Map.put(gs, name, :leader_started)
+            end
+          {:noreply, %State{state | being_added_consensus_groups: new_gs}}
+        {:error, reason} ->
+          # If `reason` is `{:already_started, _pid}`, then the error is due to `RaftFleet.add_consensus_group/3`
+          # called after `RaftFleet.remove_consensus_group/1` and before the process is killed by `RaftFleet.ConsensusMemberAdjuster`.
+          Logger.info("error in starting 1st member process for consensus group #{name}: #{inspect(reason)}")
+          {:noreply, state}
+      end
     else
+      Logger.info("manager process is not active; cannot start member processes for consensus group #{name}")
       {:noreply, state}
     end
   end
@@ -186,7 +195,6 @@ defmodule RaftFleet.Manager do
 
   defp log_abnormal_exit_reason(:normal, _), do: :ok
   defp log_abnormal_exit_reason(reason, worker_type) do
-    require Logger
     Logger.error("#{worker_type} worker died unexpectedly: #{inspect(reason)}")
   end
 
