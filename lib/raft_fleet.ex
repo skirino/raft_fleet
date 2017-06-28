@@ -11,7 +11,7 @@ defmodule RaftFleet do
   alias RaftFleet.{Cluster, Manager, LeaderPidCache, LeaderPidCacheRefresher, ZoneId, Util}
 
   def start(_type, _args) do
-    LeaderPidCache.init
+    LeaderPidCache.init()
     children = [
       Spec.supervisor(RaftFleet.ConsensusMemberSup, []),
       Spec.worker(Manager, []),

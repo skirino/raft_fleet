@@ -10,7 +10,7 @@ defmodule RaftFleet.Cluster do
       result =
         :global.trans({:raft_fleet_cluster_state_initialization, self()}, fn ->
           if !Enum.any?(Node.list, fn n -> rafted_value_server_alive?({name, n}) end) do
-            RaftedValue.start_link({:create_new_consensus_group, rv_config}, name)
+            RaftedValue.start_link({:create_new_consensus_group, rv_config}, [name: name])
           end
         end, [Node.self | Node.list], 0)
       case result do
@@ -35,7 +35,7 @@ defmodule RaftFleet.Cluster do
         {:error, :no_leader}
       else
         servers = Node.list |> Enum.map(fn n -> {name, n} end)
-        case RaftedValue.start_link({:join_existing_consensus_group, servers}, name) do
+        case RaftedValue.start_link({:join_existing_consensus_group, servers}, [name: name]) do
           {:ok, pid}  -> {:ok, pid}
           {:error, _} ->
             :timer.sleep(1_000)
