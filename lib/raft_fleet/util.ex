@@ -20,7 +20,7 @@ defmodule RaftFleet.Util do
     if Enum.empty?(statuses) do
       nil
     else
-      max_term = Enum.map(statuses, &(&1[:current_term])) |> Enum.max
+      max_term = Enum.map(statuses, &(&1[:current_term])) |> Enum.max()
       Enum.filter(statuses, &(&1[:current_term] == max_term))
       |> Enum.map(&(&1[:leader]))
       |> Enum.reject(&is_nil/1)

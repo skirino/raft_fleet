@@ -7,7 +7,7 @@ defmodule SlaveNode do
   defmacro at(call, nodename) do
     {{:., _, [mod, fun]}, _, args} = call
     quote bind_quoted: [nodename: nodename, mod: mod, fun: fun, args: args] do
-      if nodename == Node.self do
+      if nodename == Node.self() do
         apply(mod, fun, args)
       else
         :rpc.call(nodename, mod, fun, args)
@@ -26,6 +26,7 @@ defmodule SlaveNode do
     {:ok, hostname} = :inet.gethostname()
     {:ok, longname} = :slave.start_link(hostname, shortname)
     true            = :code.set_path(:code.get_path()) |> at(longname)
+    PersistenceSetting.randomly_pick_whether_to_persist(longname)
     {:ok, _} = Application.ensure_all_started(:raft_fleet) |> at(longname)
     Enum.each(nodes_before, fn n ->
       Node.connect(n) |> at(longname)
@@ -42,7 +43,7 @@ defmodule SlaveNode do
     assert RaftFleet.deactivate                          |> at(node) == {:error, :inactive}
     assert RaftFleet.activate(zone_fun.(node))           |> at(node) == :ok
     assert RaftFleet.activate(zone_fun.(node))           |> at(node) == {:error, :not_inactive}
-    wait_for_activation(node, 5)
+    wait_for_activation(node, 10)
   end
 
   defp wait_for_activation(_, 0), do: raise "activation not completed!"
@@ -75,17 +76,17 @@ defmodule SlaveNode do
     assert Process.alive?(pid)  |> at(node)
     assert RaftFleet.deactivate |> at(node) == :ok
     assert RaftFleet.deactivate |> at(node) == {:error, :inactive}
-    Process.monitor(pid)
-    assert_receive({:DOWN, _monitor_ref, :process, ^pid, _reason}, 10_000)
+    ref = Process.monitor(pid)
+    assert_receive({:DOWN, ^ref, :process, ^pid, _reason}, 15_000)
 
-    if node == Node.self do
+    if node == Node.self() do
       # Wait for worker process to exit (if any)
       state = :sys.get_state(Manager)
       [state.adjust_worker, state.activate_worker, state.deactivate_worker]
       |> Enum.reject(&is_nil/1)
-      |> Enum.each(fn pid ->
-        Process.monitor(pid)
-        assert_receive({:DOWN, _monitor_ref, :process, ^pid, _reason}, 10_000)
+      |> Enum.each(fn p ->
+        r = Process.monitor(p)
+        assert_receive({:DOWN, ^r, :process, ^p, _reason}, 15_000)
       end)
     end
   end
@@ -99,5 +100,16 @@ defmodule SlaveNode do
   def zone(node, n) do
     i = Atom.to_string(node) |> String.split("@") |> hd |> String.to_integer |> rem(n)
     "zone#{i}"
+  end
+end
+
+defmodule PersistenceSetting do
+  import SlaveNode, only: [at: 2]
+
+  def randomly_pick_whether_to_persist(longname \\ Node.self()) do
+    case :rand.uniform(2) do
+      1 -> :ok
+      2 -> Application.put_env(:raft_fleet, :persistence_dir_parent, Path.join("tmp", Atom.to_string(longname))) |> at(longname)
+    end
   end
 end

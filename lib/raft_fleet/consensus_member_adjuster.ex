@@ -12,7 +12,7 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
         leader_pid = LeaderPidCache.get(Cluster)
         kill_members_of_removed_groups(removed_groups_queue)
         adjust_consensus_member_sets(participating_nodes, groups)
-        if node(leader_pid) == Node.self() do
+        if is_pid(leader_pid) and node(leader_pid) == Node.self() do
           adjust_cluster_consensus_members(leader_pid)
         end
     end
@@ -69,7 +69,7 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
         Enum.map(unresponsive_pids, &node/1)
       status_or_reason ->
         # We need to take both of the followings into account to correctly find member processes:
-        # - currently connected nodes, which may already be deactivated but may still have member process
+        # - currently connected nodes, which may already be deactivated but may still have member processes
         # - participating (active) nodes, which may not be connected due to temporary netsplit
         connected_nodes        = MapSet.new(Node.list())
         all_nodes              = Enum.into(participating_nodes, connected_nodes)

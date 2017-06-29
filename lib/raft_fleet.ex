@@ -74,6 +74,11 @@ defmodule RaftFleet do
   `name` is used as a registered name for member processes of the new consensus group.
   `n_replica` is the number of replicas (Raft member processes implemented as `RaftedValue.Server`).
   For explanation of `rv_config` see `RaftedValue.make_config/2`.
+
+  If you configure `raft_fleet` to persist Raft logs & snapshots (see `:persistence_dir_parent` in `RaftFleet.Config`)
+  and the consensus group with `name` had been removed by `remove_consensus_group/1`,
+  then `add_consensus_group/3` will restore the state of the consensus group from the snapshot and log files
+  (to be more accurate, from the files in the node where leader of `RaftFleet.Cluster` consensus group resides).
   """
   defun add_consensus_group(name      :: g[atom],
                             n_replica :: g[pos_integer],
@@ -110,6 +115,8 @@ defmodule RaftFleet do
 
   Note that calling `add_consensus_group/3` right after `remove_consensus_group/1` with the same `name`
   may lead to confusing situation since `remove_consensus_group/1` don't immediately terminate existing member processes.
+  Note also that, if Raft logs and snapshots has been created (see `:persistence_dir_parent` in `RaftFleet.Config`),
+  `remove_consensus_group/1` does not remove these files.
   """
   defun remove_consensus_group(name :: g[atom]) :: :ok | {:error, :not_found | :no_leader} do
     case command(Cluster, {:remove_group, name}) do

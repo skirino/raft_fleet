@@ -11,7 +11,13 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
   setup do
     # For clean testing we restart :raft_fleet
     :ok = Application.stop(:raft_fleet)
+    PersistenceSetting.randomly_pick_whether_to_persist()
+    File.rm_rf!("tmp")
     :ok = Application.start(:raft_fleet)
+    on_exit(fn ->
+      Application.delete_env(:raft_fleet, :persistence_dir_parent)
+      File.rm_rf!("tmp")
+    end)
   end
 
   @group_name :consensus_group
@@ -35,10 +41,10 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
   defp start_leader_and_followers(leader_node, follower_nodes, group_name \\ @group_name) do
     Manager.start_consensus_group_members(group_name, @rv_config, []) |> at(leader_node)
     Enum.each(follower_nodes, fn n ->
-      :timer.sleep(100)
+      :timer.sleep(500)
       Manager.start_consensus_group_follower(group_name, n, leader_node)
     end)
-    :timer.sleep(100)
+    :timer.sleep(500)
   end
 
   defp call_adjust_one_step(group_name \\ @group_name) do
@@ -81,9 +87,15 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
         start_leader_and_followers(i2node(leader_node), Enum.map(follower_nodes, &i2node/1))
         call_adjust_one_step()
         assert length(consensus_members()) == n_expected
-        assert RaftedValue.status({@group_name, i2node(expected_leader_node)})[:state_name] == :leader
+        leader_status = RaftedValue.status({@group_name, i2node(expected_leader_node)})
+        assert leader_status.state_name             == :leader
+        assert length(leader_status.members)        == n_expected
+        assert leader_status.unresponsive_followers == []
 
         kill_all_consensus_members()
+        Path.wildcard("tmp/*/*")
+        |> Enum.reject(&String.ends_with?(&1, Atom.to_string(RaftFleet.Cluster)))
+        |> Enum.each(&File.rm_rf!/1)
       end)
     end)
   end

@@ -2,7 +2,7 @@ use Croma
 alias Croma.TypeGen, as: TG
 
 defmodule RaftFleet.Cluster do
-  alias RaftFleet.{NodesPerZone, ConsensusGroups, CappedQueue, MembersPerLeaderNode, UnhealthyMembersCountsMap}
+  alias RaftFleet.{NodesPerZone, ConsensusGroups, CappedQueue, MembersPerLeaderNode, UnhealthyMembersCountsMap, Config}
 
   defmodule Server do
     defun start_link(rv_config :: RaftedValue.Config.t, name :: g[atom]) :: GenServer.on_start do
@@ -10,7 +10,12 @@ defmodule RaftFleet.Cluster do
       result =
         :global.trans({:raft_fleet_cluster_state_initialization, self()}, fn ->
           if !Enum.any?(Node.list(), fn n -> rafted_value_server_alive?({name, n}) end) do
-            RaftedValue.start_link({:create_new_consensus_group, rv_config}, [name: name])
+            options =
+              case Config.persistence_dir_parent() do
+                nil -> [name: name]
+                dir -> [name: name, persistence_dir: Path.join(dir, Atom.to_string(RaftFleet.Cluster))]
+              end
+            RaftedValue.start_link({:create_new_consensus_group, rv_config}, options)
           end
         end, [Node.self() | Node.list()], 0)
       case result do

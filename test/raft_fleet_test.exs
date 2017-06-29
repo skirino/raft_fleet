@@ -13,22 +13,31 @@ defmodule RaftFleetTest do
   setup do
     # For clean testing we restart :raft_fleet
     :ok = Application.stop(:raft_fleet)
+    File.rm_rf!("tmp")
+    PersistenceSetting.randomly_pick_whether_to_persist()
     :ok = Application.start(:raft_fleet)
+    on_exit(fn ->
+      Application.delete_env(:raft_fleet, :persistence_dir_parent)
+      File.rm_rf!("tmp")
+    end)
   end
 
-  @n_consensus_groups 100
-  @rv_config          RaftedValue.make_config(RaftFleet.JustAnInt)
+  @n_consensus_groups 60
+  @rv_config_options  [
+    election_timeout: 2000, # In travis disk I/O is sometimes rather slow, resulting in more frequent leader elections
+  ]
+  @rv_config RaftedValue.make_config(RaftFleet.JustAnInt, @rv_config_options)
 
   defp start_consensus_group(name) do
     assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
     assert RaftFleet.add_consensus_group(name, 3, @rv_config) == {:error, :already_added}
-    :timer.sleep(10)
+    :timer.sleep(100)
     spawn_link(fn -> client_process_loop(name, 0) end)
   end
 
   defp client_process_loop(name, n) do
     :timer.sleep(:rand.uniform(1_000))
-    assert RaftFleet.command(name, :inc) == {:ok, n}
+    assert RaftFleet.command(name, :inc, 500, 5, 1500) == {:ok, n} # increase number of retries, to make tests more robust (especially for travis)
     client_process_loop(name, n + 1)
   end
 
@@ -38,8 +47,10 @@ defmodule RaftFleetTest do
       Enum.map(participating_nodes, fn n ->
         children = Supervisor.which_children({ConsensusMemberSup, n}) # should not exit; all participating nodes should be alive
         statuses = Enum.map(children, fn {_, pid, _, _} -> RaftedValue.status(pid) end)
-        assert Enum.all?(statuses, &Enum.empty?(&1[:unresponsive_followers]))
-        n_leaders = Enum.count(statuses, &(&1[:state_name] == :leader))
+        Enum.each(statuses, fn s ->
+          assert s.unresponsive_followers == []
+        end)
+        n_leaders = Enum.count(statuses, &(&1.state_name == :leader))
         {length(children), n_leaders}
       end)
       |> Enum.unzip()
@@ -70,7 +81,7 @@ defmodule RaftFleetTest do
     client_pids     = Enum.map(consensus_names, &start_consensus_group/1)
 
     # follower processes should automatically be spawned afterwards
-    :timer.sleep(10_000)
+    :timer.sleep(25_000)
     assert_members_well_distributed(@n_consensus_groups)
 
     f.()
@@ -86,15 +97,13 @@ defmodule RaftFleetTest do
     end)
 
     # processes should be cleaned-up
-    :timer.sleep(3_000)
+    :timer.sleep(5_000)
     assert_members_well_distributed(0)
   end
 
   cluster_node_zone_configurations = [
     {1, 1},
-    {2, 1},
     {3, 1},
-    {2, 2},
     {4, 2},
     {3, 3},
     {6, 3},
@@ -137,7 +146,7 @@ defmodule RaftFleetTest do
       Enum.each(nodes2, &activate_node(&1, zone_fun))
 
       # after several adjustments consensus members should be re-distributed
-      :timer.sleep(15_000)
+      :timer.sleep(25_000)
       assert_members_well_distributed(@n_consensus_groups)
 
       # deactivate/remove nodes one by one; clients should be able to interact with consensus leaders
@@ -168,13 +177,13 @@ defmodule RaftFleetTest do
 
     with_consensus_groups_and_their_clients(fn ->
       stop_slave(node_to_fail)
-      :timer.sleep(15_000) # members in `node_to_fail` are recognized as unhealthy, `node_purge_failure_time_window` elapses, then rebalances
+      :timer.sleep(25_000) # members in `node_to_fail` are recognized as unhealthy, `node_purge_failure_time_window` elapses, then rebalances
       assert_members_well_distributed(@n_consensus_groups)
 
       status = RaftedValue.status(RaftFleet.Cluster)
-      assert status[:state_name] == :leader
-      assert length(status[:members]) == length(Node.list()) + 1
-      assert Enum.all?(status[:members], fn pid -> node(pid) != node_to_fail end)
+      assert status.state_name == :leader
+      assert length(status.members) == length(Node.list()) + 1
+      assert Enum.all?(status.members, fn pid -> node(pid) != node_to_fail end)
     end)
 
     Enum.each([Node.self() | Node.list()], &deactivate_node/1)
@@ -207,7 +216,7 @@ defmodule RaftFleetTest do
             RaftedValue.status({RaftFleet.Cluster, n})
           end)
         status_of_leader = Enum.find(statuses, &match?(%{state_name: :leader}, &1))
-        assert status_of_leader[:unresponsive_followers] == []
+        assert status_of_leader.unresponsive_followers == []
       end)
     end)
   end
@@ -229,15 +238,52 @@ defmodule RaftFleetTest do
         assert RaftFleet.add_consensus_group(:consensus2, 3, @rv_config) == :ok
         assert RaftFleet.add_consensus_group(:consensus3, 3, @rv_config) == :ok
         assert RaftFleet.consensus_groups()                              == %{consensus1: 3, consensus2: 3, consensus3: 3}
+
+        :timer.sleep(100)
+        assert is_pid(RaftFleet.whereis_leader(:consensus1))
+        assert is_pid(RaftFleet.whereis_leader(:consensus2))
+        assert is_pid(RaftFleet.whereis_leader(:consensus3))
+
         assert RaftFleet.remove_consensus_group(:consensus1)             == :ok
         assert RaftFleet.remove_consensus_group(:consensus2)             == :ok
         assert RaftFleet.remove_consensus_group(:consensus3)             == :ok
         assert RaftFleet.consensus_groups()                              == %{}
-
-        assert is_pid(RaftFleet.whereis_leader(:consensus1))
-        assert is_pid(RaftFleet.whereis_leader(:consensus2))
-        assert is_pid(RaftFleet.whereis_leader(:consensus3))
       end)
     end)
+  end
+
+  test "state of a removed consensus group should be restored on restart if snapshot and log filess are available" do
+    with_slaves([:"2", :"3"], fn ->
+      with_active_nodes([Node.self() | Node.list()], &zone(&1, 2), fn ->
+        name = :consensus_group1
+        leader_node = RaftedValue.status(RaftFleet.Cluster).leader |> node()
+
+        assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
+        :timer.sleep(100)
+        Enum.each(0 .. 9, fn i ->
+          assert RaftFleet.command(name, :inc) == {:ok, i}
+        end)
+        pids = RaftedValue.status({name, leader_node}).members
+        assert RaftFleet.remove_consensus_group(name) == :ok
+        Enum.each(pids, &monitor_wait/1)
+
+        assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
+        :timer.sleep(100)
+        data_after_restart =
+          case Application.get_env(:raft_fleet, :persistence_dir_parent) |> at(leader_node) do
+            nil  -> 0
+            _dir -> 10
+          end
+        {:leader, state} = :sys.get_state({name, leader_node})
+        assert state.data == data_after_restart
+      end)
+    end)
+  end
+
+  defp monitor_wait(pid) do
+    ref = Process.monitor(pid)
+    receive do
+      {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
+    end
   end
 end
