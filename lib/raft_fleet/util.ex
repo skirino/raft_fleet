@@ -14,7 +14,7 @@ defmodule RaftFleet.Util do
 
   defp find_leader(name) do
     statuses =
-      [Node.self | Node.list]
+      [Node.self() | Node.list()]
       |> Enum.map(fn node -> try_status({name, node}) end)
       |> Enum.reject(&is_nil/1)
     if Enum.empty?(statuses) do
@@ -24,7 +24,7 @@ defmodule RaftFleet.Util do
       Enum.filter(statuses, &(&1[:current_term] == max_term))
       |> Enum.map(&(&1[:leader]))
       |> Enum.reject(&is_nil/1)
-      |> List.first
+      |> List.first()
     end
   end
 

@@ -17,8 +17,8 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
   @group_name :consensus_group
   @rv_config  RaftedValue.make_config(RaftFleet.JustAnInt)
 
-  defp consensus_members do
-    [Node.self | Node.list] |> Enum.map(fn n ->
+  defp consensus_members() do
+    [Node.self() | Node.list()] |> Enum.map(fn n ->
       Process.whereis(@group_name) |> at(n)
     end)
     |> Enum.reject(&is_nil/1)
@@ -26,7 +26,7 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
 
   defp i2node(i) do
     s = Integer.to_string(i)
-    [Node.self | Node.list]
+    [Node.self() | Node.list()]
     |> Enum.find(fn n ->
       Atom.to_string(n) |> String.starts_with?(s)
     end)
@@ -43,19 +43,19 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
 
   defp call_adjust_one_step(group_name \\ @group_name) do
     desired_member_nodes = Enum.map([1, 2, 3], &i2node/1)
-    ConsensusMemberAdjuster.adjust_one_step([Node.self | Node.list], group_name, desired_member_nodes)
+    ConsensusMemberAdjuster.adjust_one_step([Node.self() | Node.list()], group_name, desired_member_nodes)
     :timer.sleep(500)
   end
 
-  defp kill_all_consensus_members do
-    [Node.self | Node.list]
+  defp kill_all_consensus_members() do
+    [Node.self() | Node.list()]
     |> Enum.flat_map(fn n -> Supervisor.which_children({ConsensusMemberSup, n}) end)
     |> Enum.each(fn {_, pid, _, _} -> Process.exit(pid, :kill) end)
   end
 
   defp with_active_slaves(shortnames, f) do
     with_slaves(shortnames, fn ->
-      with_active_nodes([Node.self | Node.list], &zone(&1, 1), fn ->
+      with_active_nodes([Node.self() | Node.list()], &zone(&1, 1), fn ->
         f.()
       end)
     end)
@@ -90,11 +90,11 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
 
   test "adjust_one_step/3 should remove pid that is definitely dead" do
     with_active_slaves([:"2", :"3"], fn ->
-      start_leader_and_followers(Node.self, Node.list)
+      start_leader_and_followers(Node.self(), Node.list())
 
       %{members: members1} = RaftedValue.status(@group_name)
       assert length(members1) == 3
-      target_node = hd(Node.list)
+      target_node = hd(Node.list())
       target_pid  = Enum.find(members1, fn pid -> node(pid) == target_node end)
       Process.exit(target_pid, :kill)
       :timer.sleep(2_000) # wait until the killed process is recognized as "unresponsive" by the consensus leader
@@ -123,7 +123,7 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
       end
 
       exec = fn(target_nodes, group_name) ->
-        start_leader_and_followers(Node.self, Node.list, group_name)
+        start_leader_and_followers(Node.self(), Node.list(), group_name)
         refute raft_log_includes_removal_of_group?.(group_name)
 
         Enum.each(target_nodes, fn n ->
@@ -136,8 +136,8 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
         assert raft_log_includes_removal_of_group?.(group_name)
       end
 
-      [Node.self | Node.list]                        |> exec.(:consensus_group_1)
-      [Node.self | Node.list] |> Enum.take_random(2) |> exec.(:consensus_group_2)
+      [Node.self() | Node.list()]                        |> exec.(:consensus_group_1)
+      [Node.self() | Node.list()] |> Enum.take_random(2) |> exec.(:consensus_group_2)
     end)
   end
 

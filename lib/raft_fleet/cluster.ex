@@ -9,10 +9,10 @@ defmodule RaftFleet.Cluster do
       # Use lock facility provided by :global module to avoid race conditions
       result =
         :global.trans({:raft_fleet_cluster_state_initialization, self()}, fn ->
-          if !Enum.any?(Node.list, fn n -> rafted_value_server_alive?({name, n}) end) do
+          if !Enum.any?(Node.list(), fn n -> rafted_value_server_alive?({name, n}) end) do
             RaftedValue.start_link({:create_new_consensus_group, rv_config}, [name: name])
           end
-        end, [Node.self | Node.list], 0)
+        end, [Node.self() | Node.list()], 0)
       case result do
         {:ok, pid} -> {:ok, pid}
         _          ->
@@ -34,7 +34,7 @@ defmodule RaftFleet.Cluster do
       if tries_remaining == 0 do
         {:error, :no_leader}
       else
-        servers = Node.list |> Enum.map(fn n -> {name, n} end)
+        servers = Node.list() |> Enum.map(fn n -> {name, n} end)
         case RaftedValue.start_link({:join_existing_consensus_group, servers}, [name: name]) do
           {:ok, pid}  -> {:ok, pid}
           {:error, _} ->
@@ -44,7 +44,7 @@ defmodule RaftFleet.Cluster do
       end
     end
 
-    defun child_spec :: Supervisor.Spec.spec do
+    defun child_spec() :: Supervisor.Spec.spec do
       alias RaftFleet.Cluster, as: C
       rv_config = RaftedValue.make_config(C, [leader_hook_module: C.Hook, election_timeout_clock_drift_margin: 500])
       Supervisor.Spec.worker(__MODULE__, [rv_config, C], [restart: :transient])
@@ -156,7 +156,7 @@ defmodule RaftFleet.Cluster do
         {:add_group, group_name, _, rv_config, leader_node} ->
           # Start leader only when this hook is run on the same node to which :add_group command was submitted
           # in order not to spawn multiple leaders even if this log entry is committed multiple times
-          if Node.self == leader_node do
+          if Node.self() == leader_node do
             case ret do
               {:error, _}  -> nil
               {:ok, nodes} -> Manager.start_consensus_group_members(group_name, rv_config, nodes)
@@ -185,7 +185,7 @@ defmodule RaftFleet.Cluster do
   @behaviour RaftedValue.Data
   @typep t :: State.t
 
-  defun new :: t do
+  defun new() :: t do
     q = CappedQueue.new(100)
     %State{nodes_per_zone: %{}, consensus_groups: %{}, recently_removed_consensus_names: q, members_per_leader_node: %{}, unhealthy_members_map: %{}}
   end

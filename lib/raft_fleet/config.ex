@@ -33,19 +33,19 @@ defmodule RaftFleet.Config do
         i.e. it defaults to #{div(@default_leader_pid_cache_refresh_interval, 60_000)} minutes.
   """
 
-  defun balancing_interval :: pos_integer do
+  defun balancing_interval() :: pos_integer do
     Application.get_env(:raft_fleet, :balancing_interval, @default_balancing_interval)
   end
 
-  defun node_purge_threshold_failing_members :: pos_integer do
+  defun node_purge_threshold_failing_members() :: pos_integer do
     Application.get_env(:raft_fleet, :node_purge_threshold_failing_members, @default_node_purge_threshold_failing_members)
   end
 
-  defun node_purge_failure_time_window :: pos_integer do
+  defun node_purge_failure_time_window() :: pos_integer do
     Application.get_env(:raft_fleet, :node_purge_failure_time_window, @default_node_purge_failure_time_window)
   end
 
-  defun leader_pid_cache_refresh_interval :: pos_integer do
+  defun leader_pid_cache_refresh_interval() :: pos_integer do
     Application.get_env(:raft_fleet, :leader_pid_cache_refresh_interval, @default_leader_pid_cache_refresh_interval)
   end
 end

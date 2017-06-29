@@ -52,7 +52,7 @@ defmodule RaftFleet do
   Note that calling this function does not immediately remove consensus member processes in this node;
   these processes will be gradually migrated to other nodes by periodic rebalancing.
   """
-  defun deactivate :: :ok | {:error, :inactive} do
+  defun deactivate() :: :ok | {:error, :inactive} do
     GenServer.call(Manager, :deactivate)
   end
 
@@ -63,7 +63,7 @@ defmodule RaftFleet do
   The returned value is grouped by zone IDs which have been passed to `activate/1`.
   This function exits if no active node exists in the cluster.
   """
-  defun active_nodes :: %{ZoneId.t => [node]} do
+  defun active_nodes() :: %{ZoneId.t => [node]} do
     {:ok, ret} = RaftFleet.query(Cluster, :active_nodes)
     ret
   end
@@ -125,7 +125,7 @@ defmodule RaftFleet do
   The returned value is a map whose keys and values are consensus group name and number of replicas of the group.
   This function exits if no active node exists in the cluster.
   """
-  defun consensus_groups :: %{atom => pos_integer} do
+  defun consensus_groups() :: %{atom => pos_integer} do
     {:ok, ret} = RaftFleet.query(Cluster, :consensus_groups)
     ret
   end
@@ -138,7 +138,7 @@ defmodule RaftFleet do
   caches PID of the current leader in local ETS table and send the given command to the leader.
 
   `timeout` is used in each synchronous messaging.
-  In order to tolerate temporaral absences of leaders during Raft leader elections, it retries requests up to `retry`.
+  In order to tolerate temporal absences of leaders during Raft leader elections, it retries requests up to `retry`.
   Before retrying requests this function sleeps for `retry_interval` milliseconds.
   Thus for worst case this function blocks the caller for `timeout * (retry + 1) + retry_interval * retry`.
   Note that for complete masking of leader elections `retry_interval * retry` must be sufficiently longer than

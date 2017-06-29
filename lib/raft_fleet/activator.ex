@@ -22,13 +22,13 @@ defmodule RaftFleet.Activator do
   end
 
   defp step(:start_cluster_consensus_member) do
-    case Supervisor.start_child(RaftFleet.Supervisor, Cluster.Server.child_spec) do
+    case Supervisor.start_child(RaftFleet.Supervisor, Cluster.Server.child_spec()) do
       {:ok, _}    -> :ok
       {:error, _} -> :error
     end
   end
   defp step({:add_node, zone}) do
-    case RaftFleet.command(Cluster, {:add_node, Node.self, zone}) do
+    case RaftFleet.command(Cluster, {:add_node, Node.self(), zone}) do
       {:ok, _}    -> :ok
       {:error, _} -> :error
     end

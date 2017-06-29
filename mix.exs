@@ -3,7 +3,7 @@ defmodule RaftFleet.Mixfile do
 
   @github_url "https://github.com/skirino/raft_fleet"
 
-  def project do
+  def project() do
     [
       app:             :raft_fleet,
       version:         "0.1.16",
@@ -19,14 +19,14 @@ defmodule RaftFleet.Mixfile do
     ]
   end
 
-  def application do
+  def application() do
     [
       applications: [:croma, :rafted_value, :logger],
       mod: {RaftFleet, []},
     ]
   end
 
-  defp deps do
+  defp deps() do
     [
       {:croma       , "~> 0.6"},
       {:rafted_value, "~> 0.2.1"},
@@ -36,7 +36,7 @@ defmodule RaftFleet.Mixfile do
     ]
   end
 
-  defp package do
+  defp package() do
     [
       files:       ["lib", "mix.exs", "README.md", "LICENSE"],
       maintainers: ["Shunsuke Kirino"],

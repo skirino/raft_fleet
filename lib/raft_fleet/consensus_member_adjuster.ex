@@ -4,15 +4,15 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
   require Logger
   alias RaftFleet.{Cluster, Manager, LeaderPidCache, Config}
 
-  def adjust do
-    case RaftFleet.query(Cluster, {:consensus_groups, Node.self}) do
+  def adjust() do
+    case RaftFleet.query(Cluster, {:consensus_groups, Node.self()}) do
       {:error, reason} ->
         Logger.info("querying all consensus groups failed: #{inspect(reason)}")
       {:ok, {participating_nodes, groups, removed_groups_queue}} ->
         leader_pid = LeaderPidCache.get(Cluster)
         kill_members_of_removed_groups(removed_groups_queue)
         adjust_consensus_member_sets(participating_nodes, groups)
-        if node(leader_pid) == Node.self do
+        if node(leader_pid) == Node.self() do
           adjust_cluster_consensus_members(leader_pid)
         end
     end
@@ -35,8 +35,8 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
     unhealthy_members_counts =
       Enum.flat_map(groups, fn group -> do_adjust(participating_nodes, group) end)
       |> Enum.reduce(%{}, fn(node, map) -> Map.update(map, node, 1, &(&1 + 1)) end)
-    threshold = Config.node_purge_threshold_failing_members
-    RaftFleet.command(Cluster, {:report_unhealthy_members, Node.self, unhealthy_members_counts, threshold})
+    threshold = Config.node_purge_threshold_failing_members()
+    RaftFleet.command(Cluster, {:report_unhealthy_members, Node.self(), unhealthy_members_counts, threshold})
   end
 
   defp do_adjust(_, {_, []}), do: []
@@ -45,7 +45,7 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
   end
 
   defpt adjust_one_step(participating_nodes, group_name, [leader_node | follower_nodes] = desired_member_nodes) do
-    # Note: `leader_node == Node.self` always holds, as this node is supposed to host leader process of this `group`
+    # Note: `leader_node == Node.self()` always holds, as this node is supposed to host leader process of this `group`
     case try_status(group_name) do
       %{state_name: :leader, from: pid, members: members, unresponsive_followers: unresponsive_pids} ->
         follower_nodes_from_leader = Enum.map(members, &node/1) |> List.delete(leader_node) |> Enum.sort
@@ -71,7 +71,7 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
         # We need to take both of the followings into account to correctly find member processes:
         # - currently connected nodes, which may already be deactivated but may still have member process
         # - participating (active) nodes, which may not be connected due to temporary netsplit
-        connected_nodes        = MapSet.new(Node.list)
+        connected_nodes        = MapSet.new(Node.list())
         all_nodes              = Enum.into(participating_nodes, connected_nodes)
         all_nodes_without_self = MapSet.delete(all_nodes, leader_node)
         node_with_status_or_reason_pairs0 = Enum.map(all_nodes_without_self, fn n -> {n, try_status({group_name, n})} end)
@@ -137,7 +137,7 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
   defp find_leader_from_statuses([]), do: nil
   defp find_leader_from_statuses(statuses) do
     statuses_by_term = Enum.group_by(statuses, fn %{current_term: t} -> t end)
-    latest_term = Map.keys(statuses_by_term) |> Enum.max
+    latest_term = Map.keys(statuses_by_term) |> Enum.max()
     statuses_by_term[latest_term]
     |> Enum.find_value(fn
       %{state_name: :leader, from: from} -> from

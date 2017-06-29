@@ -3,7 +3,7 @@ use Croma
 defmodule RaftFleet.LeaderPidCache do
   @table_name :raft_fleet_leader_pid_cache
 
-  defun init :: :ok do
+  defun init() :: :ok do
     _table_id = :ets.new(@table_name, [:public, :named_table, {:read_concurrency, true}])
     :ok
   end
@@ -25,7 +25,7 @@ defmodule RaftFleet.LeaderPidCache do
     :ok
   end
 
-  defun keys :: [atom] do
+  defun keys() :: [atom] do
     case :ets.first(@table_name) do
       :"$end_of_table" -> []
       k                -> keys_impl(k, [k])

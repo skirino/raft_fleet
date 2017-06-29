@@ -12,7 +12,7 @@ defmodule RaftFleet.Deactivator do
     :delete_child_from_supervisor,
   ]
 
-  def deactivate do
+  def deactivate() do
     run_steps(@deactivate_steps, @tries)
   end
 
@@ -28,7 +28,7 @@ defmodule RaftFleet.Deactivator do
   end
 
   defp step(:remove_node_command) do
-    case RaftFleet.command(Cluster, {:remove_node, Node.self}) do
+    case RaftFleet.command(Cluster, {:remove_node, Node.self()}) do
       {:ok, _} -> :ok
       _        -> :error
     end

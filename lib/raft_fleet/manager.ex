@@ -26,7 +26,7 @@ defmodule RaftFleet.Manager do
     end
   end
 
-  defun start_link :: GenServer.on_start do
+  defun start_link() :: GenServer.on_start do
     GenServer.start_link(__MODULE__, :ok, [name: __MODULE__])
   end
 
@@ -66,7 +66,7 @@ defmodule RaftFleet.Manager do
       if ref1, do: Process.cancel_timer(ref1)
       ref2 =
         if node_to_purge do
-          Process.send_after(self(), {:purge_node, node_to_purge}, Config.node_purge_failure_time_window)
+          Process.send_after(self(), {:purge_node, node_to_purge}, Config.node_purge_failure_time_window())
         else
           nil
         end
@@ -85,10 +85,10 @@ defmodule RaftFleet.Manager do
           # as adding a follower can only be done if no `uncommitted_membership_change` exists in the target consensus group.
           # Although this race condition can be automatically resolved by retries and thus is harmless,
           # we try to avoid it by waiting for a while for each follower, in order to reduce unnecessary crash logs.
-          List.delete(member_nodes, Node.self)
-          |> Enum.with_index
+          List.delete(member_nodes, Node.self())
+          |> Enum.with_index()
           |> Enum.each(fn {node, i} ->
-            start_consensus_group_follower(name, node, Node.self, i * 100)
+            start_consensus_group_follower(name, node, Node.self(), i * 100)
           end)
           new_gs =
             case gs[name] do
@@ -113,8 +113,8 @@ defmodule RaftFleet.Manager do
     if State.phase(state) == :active do
       other_node_list =
         case leader_node_hint do
-          nil  -> Node.list
-          node -> [node | List.delete(Node.list, node)] # reorder `Node.list` so that the new follower can find leader immediately
+          nil  -> Node.list()
+          node -> [node | List.delete(Node.list(), node)] # reorder `Node.list` so that the new follower can find leader immediately
         end
       other_node_members = Enum.map(other_node_list, fn n -> {name, n} end)
       # To avoid blocking the Manager process, we spawn a temporary process solely for `start_child/2`.
@@ -181,7 +181,7 @@ defmodule RaftFleet.Manager do
 
   defp start_timer(%State{adjust_timer: timer} = state) do
     if timer, do: Process.cancel_timer(timer)
-    %State{state | adjust_timer: Process.send_after(self(), :adjust_members, Config.balancing_interval)}
+    %State{state | adjust_timer: Process.send_after(self(), :adjust_members, Config.balancing_interval())}
   end
   defp stop_timer(%State{adjust_timer: timer} = state) do
     if timer, do: Process.cancel_timer(timer)
