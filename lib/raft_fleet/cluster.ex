@@ -10,12 +10,7 @@ defmodule RaftFleet.Cluster do
       result =
         :global.trans({:raft_fleet_cluster_state_initialization, self()}, fn ->
           if !Enum.any?(Node.list(), fn n -> rafted_value_server_alive?({name, n}) end) do
-            options =
-              case Config.persistence_dir_parent() do
-                nil -> [name: name]
-                dir -> [name: name, persistence_dir: Path.join(dir, Atom.to_string(RaftFleet.Cluster))]
-              end
-            RaftedValue.start_link({:create_new_consensus_group, rv_config}, options)
+            RaftedValue.start_link({:create_new_consensus_group, rv_config}, make_options(name))
           end
         end, [Node.self() | Node.list()], 0)
       case result do
@@ -35,12 +30,19 @@ defmodule RaftFleet.Cluster do
       end
     end
 
+    defunp make_options(name :: atom) :: [RaftedValue.option] do
+      case Config.persistence_dir_parent() do
+        nil -> [name: name]
+        dir -> [name: name, persistence_dir: Path.join(dir, Atom.to_string(RaftFleet.Cluster))]
+      end
+    end
+
     defunp start_follower_with_retry(name :: atom, tries_remaining :: non_neg_integer) :: GenServer.on_start do
       if tries_remaining == 0 do
         {:error, :no_leader}
       else
         servers = Node.list() |> Enum.map(fn n -> {name, n} end)
-        case RaftedValue.start_link({:join_existing_consensus_group, servers}, [name: name]) do
+        case RaftedValue.start_link({:join_existing_consensus_group, servers}, make_options(name)) do
           {:ok, pid}  -> {:ok, pid}
           {:error, _} ->
             :timer.sleep(1_000)
