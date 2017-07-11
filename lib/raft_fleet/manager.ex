@@ -101,7 +101,7 @@ defmodule RaftFleet.Manager do
         {:error, reason} ->
           # If `reason` is `{:already_started, _pid}`, then the error is due to `RaftFleet.add_consensus_group/3`
           # called after `RaftFleet.remove_consensus_group/1` and before the process is killed by `RaftFleet.ConsensusMemberAdjuster`.
-          Logger.info("error in starting 1st member process for consensus group #{name}: #{inspect(reason)}")
+          Logger.info("error in starting 1st member process of consensus group #{name}: #{inspect(reason)}")
           {:noreply, state}
       end
     else
@@ -114,10 +114,10 @@ defmodule RaftFleet.Manager do
       other_node_list =
         case leader_node_hint do
           nil  -> Node.list()
-          node -> [node | List.delete(Node.list(), node)] # reorder `Node.list` so that the new follower can find leader immediately
+          node -> [node | List.delete(Node.list(), node)] # reorder `Node.list()` so that the new follower can find leader immediately
         end
       other_node_members = Enum.map(other_node_list, fn n -> {name, n} end)
-      # To avoid blocking the Manager process, we spawn a temporary process solely for `start_child/2`.
+      # To avoid blocking the Manager process, we spawn a temporary process solely for `Supervisor.start_child/2`.
       spawn_link(fn -> start_follower_with_retry(other_node_members, name, 3) end)
     end
     {:noreply, state}
