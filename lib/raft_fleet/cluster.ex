@@ -175,11 +175,10 @@ defmodule RaftFleet.Cluster do
       end
     end
     def on_query_answered(_, _, _), do: nil
-    def on_follower_added(_, _), do: nil
-    def on_follower_removed(_, _), do: nil
-    def on_elected(state) do
-      Manager.node_purge_candidate_changed(state.node_to_purge)
-    end
+    def on_follower_added(_, _)   , do: nil
+    def on_follower_removed(_, _) , do: nil
+    def on_elected(state)         , do: Manager.node_purge_candidate_changed(state.node_to_purge)
+    def on_restored_from_files(_) , do: nil
 
     defp notify_if_node_to_purge_changed(state_before, state_after) do
       node_to_purge = state_after.node_to_purge

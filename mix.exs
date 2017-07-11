@@ -29,7 +29,7 @@ defmodule RaftFleet.Mixfile do
   defp deps() do
     [
       {:croma       , "~> 0.6"},
-      {:rafted_value, "~> 0.2.1"},
+      {:rafted_value, "~> 0.3.1"},
       {:coverex     , "~> 1.4" , only: :test},
       {:dialyze     , "~> 0.2" , only: :dev },
       {:ex_doc      , "~> 0.14", only: :dev },
