@@ -25,7 +25,7 @@ defmodule RaftFleet.LeaderPidCacheRefresher do
   end
 
   defp refresh_all() do
-    cache_keys0 = LeaderPidCache.keys |> MapSet.new
+    cache_keys0 = LeaderPidCache.keys() |> MapSet.new()
     if MapSet.size(cache_keys0) == 0 do
       # Cache is not yet used (probably `RaftFleet.activate/1` is not called); nothing to do.
       :ok

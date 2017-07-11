@@ -37,7 +37,7 @@ defmodule RaftFleet.UnhealthyMembersCountsMap do
 
   defun remove_node(umcm :: t, n :: node) :: t do
     Map.delete(umcm, n)
-    |> Enum.into(%{}, fn {node, counts} -> {node, Map.delete(counts, n)} end)
+    |> Map.new(fn {node, counts} -> {node, Map.delete(counts, n)} end)
   end
 
   defun most_unhealthy_node(m :: t, threshold :: non_neg_integer) :: nil | node do
@@ -47,7 +47,7 @@ defmodule RaftFleet.UnhealthyMembersCountsMap do
     end)
     |> Enum.filter(fn {_node, count} -> threshold < count end)
     |> Enum.sort_by(fn {node, count} -> {count, node} end, &>=/2) # use order of `node` to break ties
-    |> List.first
+    |> List.first()
     |> case do
       {node, _count} -> node
       nil            -> nil
@@ -59,7 +59,7 @@ if Mix.env == :test do
   # To run code within slave nodes during tests, all modules must be compiled into beam files (i.e. they can't load .exs files)
   defmodule RaftFleet.JustAnInt do
     @behaviour RaftedValue.Data
-    def new, do: 0
+    def new(), do: 0
     def command(i, {:set, j}), do: {i, j    }
     def command(i, :inc     ), do: {i, i + 1}
     def query(i, :get), do: i

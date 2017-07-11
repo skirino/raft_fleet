@@ -44,13 +44,13 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
       :timer.sleep(500)
       Manager.start_consensus_group_follower(group_name, n, leader_node)
     end)
-    :timer.sleep(500)
+    :timer.sleep(1000)
   end
 
   defp call_adjust_one_step(group_name \\ @group_name) do
     desired_member_nodes = Enum.map([1, 2, 3], &i2node/1)
     ConsensusMemberAdjuster.adjust_one_step([Node.self() | Node.list()], group_name, desired_member_nodes)
-    :timer.sleep(500)
+    :timer.sleep(1000)
   end
 
   defp kill_all_consensus_members() do
@@ -128,7 +128,7 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
   test "adjust_one_step/3 should remove consensus group whose majority of members are definitely dead" do
     with_active_slaves([:"2", :"3"], fn ->
       # To avoid complication due to periodic adjustment process, we don't add_consensus_group here;
-      # for testing whether `:remove_group` is done, we look into Raft logs.
+      # to judge whether `:remove_group` is done, we look into Raft logs.
       raft_log_includes_removal_of_group? = fn(group_name) ->
         {_, state} = :sys.get_state(RaftFleet.Cluster)
         Enum.any?(state.logs.map, &match?({i, {_term, i, :command, {_from, {:remove_group, ^group_name}, _ref}}}, &1))
@@ -164,7 +164,7 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
         ConsensusMemberAdjuster.adjust_one_step(nodes_half1, @group_name, nodes_half1)
         :timer.sleep(500)
       end)
-      :timer.sleep(500)
+      :timer.sleep(1000)
 
       nodes_with_members2 = consensus_members() |> Enum.map(&node/1)
       assert Enum.sort(nodes_with_members2) == Enum.sort(nodes_half1)
