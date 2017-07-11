@@ -15,18 +15,22 @@ defmodule SlaveNode do
     end
   end
 
-  def with_slaves(shortnames, f) do
-    Enum.each(shortnames, &start_slave/1)
+  def with_slaves(shortnames, persist \\ :random, f) do
+    Enum.each(shortnames, &start_slave(&1, persist))
     f.()
     Enum.each(shortnames, &stop_slave/1)
   end
 
-  def start_slave(shortname) do
+  def start_slave(shortname, persist \\ :random) do
     nodes_before = Node.list()
     {:ok, hostname} = :inet.gethostname()
     {:ok, longname} = :slave.start_link(hostname, shortname)
     true            = :code.set_path(:code.get_path()) |> at(longname)
-    PersistenceSetting.randomly_pick_whether_to_persist(longname)
+    case persist do
+      :random -> PersistenceSetting.randomly_pick_whether_to_persist(longname)
+      :yes    -> PersistenceSetting.turn_on_persistence(longname)
+      :no     -> :ok
+    end
     {:ok, _} = Application.ensure_all_started(:raft_fleet) |> at(longname)
     Enum.each(nodes_before, fn n ->
       Node.connect(n) |> at(longname)
@@ -98,7 +102,7 @@ defmodule SlaveNode do
   end
 
   def zone(node, n) do
-    i = Atom.to_string(node) |> String.split("@") |> hd |> String.to_integer |> rem(n)
+    i = Atom.to_string(node) |> String.split("@") |> hd() |> String.to_integer |> rem(n)
     "zone#{i}"
   end
 end
@@ -109,7 +113,11 @@ defmodule PersistenceSetting do
   def randomly_pick_whether_to_persist(longname \\ Node.self()) do
     case :rand.uniform(2) do
       1 -> :ok
-      2 -> Application.put_env(:raft_fleet, :persistence_dir_parent, Path.join("tmp", Atom.to_string(longname))) |> at(longname)
+      2 -> turn_on_persistence(longname)
     end
+  end
+
+  def turn_on_persistence(longname) do
+    Application.put_env(:raft_fleet, :persistence_dir_parent, Path.join("tmp", Atom.to_string(longname))) |> at(longname)
   end
 end

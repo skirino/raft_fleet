@@ -78,8 +78,7 @@ defmodule RaftFleet do
 
   If you configure `raft_fleet` to persist Raft logs & snapshots (see `:persistence_dir_parent` in `RaftFleet.Config`)
   and the consensus group with `name` had been removed by `remove_consensus_group/1`,
-  then `add_consensus_group/3` will restore the state of the consensus group from the snapshot and log files
-  (to be more accurate, from the files in the node where leader of `RaftFleet.Cluster` consensus group resides).
+  then `add_consensus_group/3` will restore the state of the consensus group from the snapshot and log files.
   """
   defun add_consensus_group(name      :: g[atom],
                             n_replica :: g[pos_integer],
@@ -97,7 +96,15 @@ defmodule RaftFleet do
     case call_result do
       {:ok, {leader_node, {:ok, _nodes}}} ->
         try do
-          GenServer.call({Manager, leader_node}, {:await_completion_of_adding_consensus_group, name})
+          case GenServer.call({Manager, leader_node}, {:await_completion_of_adding_consensus_group, name}) do
+            {:ok, :leader_started}                        -> :ok
+            {:ok, {:leader_delegated_to, delegated_node}} ->
+              {:ok, :leader_started} = GenServer.call({Manager, delegated_node}, {:await_completion_of_adding_consensus_group, name})
+              :ok
+            {:error, :process_exists} ->
+              remove_consensus_group(name)
+              {:error, :process_exists}
+          end
         catch
           :exit, reason -> # Something went wrong! Try to rollback the added consensus group
             remove_consensus_group(name)
@@ -114,8 +121,8 @@ defmodule RaftFleet do
   Removing a consensus group will eventually trigger terminations of all members of the group.
   The replicated value held by the group will be discarded.
 
-  Note that calling `add_consensus_group/3` right after `remove_consensus_group/1` with the same `name`
-  may lead to confusing situation since `remove_consensus_group/1` don't immediately terminate existing member processes.
+  Note that `remove_consensus_group/1` does not immediately terminate existing member processes;
+  they will be terminated afterward by background worker process (see also `:balancing_interval` in `RaftFleet.Config`).
   Note also that, if Raft logs and snapshots has been created (see `:persistence_dir_parent` in `RaftFleet.Config`),
   `remove_consensus_group/1` does not remove these files.
   """

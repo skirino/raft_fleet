@@ -28,6 +28,26 @@ defmodule RaftFleetTest do
   ]
   @rv_config RaftedValue.make_config(RaftFleet.JustAnInt, @rv_config_options)
 
+  test "add_consensus_group/3 right after remove_consensus_group/1 should return {:error, :process_exists} and should not do nothing" do
+    with_active_nodes([Node.self()], &zone(&1, 1), fn ->
+      Enum.each(1 .. 10, fn i ->
+        name = :"consensus#{i}"
+        assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
+        assert RaftFleet.consensus_groups()                       == %{name => 3}
+        assert RaftFleet.remove_consensus_group(name)             == :ok
+        assert RaftFleet.consensus_groups()                       == %{}
+        case RaftFleet.add_consensus_group(name, 3, @rv_config) do
+          :ok -> # on rare occasion member process is terminated by adjuster process
+            assert RaftFleet.consensus_groups()           == %{name => 3}
+            assert RaftFleet.remove_consensus_group(name) == :ok
+            assert RaftFleet.consensus_groups()           == %{}
+          {:error, :process_exists} -> # matches this pattern most of the time
+            assert RaftFleet.consensus_groups() == %{}
+        end
+      end)
+    end)
+  end
+
   defp start_consensus_group(name) do
     assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
     assert RaftFleet.add_consensus_group(name, 3, @rv_config) == {:error, :already_added}
@@ -252,30 +272,27 @@ defmodule RaftFleetTest do
     end)
   end
 
-  test "state of a removed consensus group should be restored on restart if snapshot and log filess are available" do
-    with_slaves([:"2", :"3"], fn ->
+  test "state of a removed consensus group should be restored from latest snapshot/log files on restart" do
+    slave_shortnames = Enum.map(2 .. 12, fn i -> :"#{i}" end)
+    with_slaves(slave_shortnames, :yes, fn ->
       with_active_nodes([Node.self() | Node.list()], &zone(&1, 2), fn ->
-        name = :consensus_group1
-        leader_node = RaftedValue.status(RaftFleet.Cluster).leader |> node()
+        group_names = Enum.map(1 .. 5, fn i -> :"c#{i}" end)
+        Enum.each(group_names, fn name ->
+          assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
+          [leader_node | _] = wait_until_members_fully_migrate(name, 8)
 
-        assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
-        :timer.sleep(100)
-        Enum.each(0 .. 9, fn i ->
-          assert RaftFleet.command(name, :inc) == {:ok, i}
+          Enum.each(0 .. 9, fn i ->
+            assert RaftFleet.command(name, :inc) == {:ok, i}
+          end)
+          pids = RaftedValue.status({name, leader_node}).members
+          assert RaftFleet.remove_consensus_group(name) == :ok
+          Enum.each(pids, &monitor_wait/1)
+
+          assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
+          _ = wait_until_members_fully_migrate(name, 8)
+          {:leader, state} = :sys.get_state({name, leader_node})
+          assert state.data == 10 # The state should be correctly restored, regardless of whether Cluster leader node was included in the consensus or not
         end)
-        pids = RaftedValue.status({name, leader_node}).members
-        assert RaftFleet.remove_consensus_group(name) == :ok
-        Enum.each(pids, &monitor_wait/1)
-
-        assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
-        :timer.sleep(100)
-        data_after_restart =
-          case Application.get_env(:raft_fleet, :persistence_dir_parent) |> at(leader_node) do
-            nil  -> 0
-            _dir -> 10
-          end
-        {:leader, state} = :sys.get_state({name, leader_node})
-        assert state.data == data_after_restart
       end)
     end)
   end
@@ -284,6 +301,34 @@ defmodule RaftFleetTest do
     ref = Process.monitor(pid)
     receive do
       {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
+    end
+  end
+
+  defp wait_until_members_fully_migrate(name, max_tries) do
+    expected_nodes = RaftFleet.NodesPerZone.lrw_members(RaftFleet.active_nodes(), name, 3)
+    wait_until_members_match(name, expected_nodes, max_tries, 0)
+    expected_nodes
+  end
+
+  defp wait_until_members_match(name, expected_nodes, max_tries, tries) do
+    if tries >= max_tries do
+      raise "Consensus members do not converge! #{name}"
+    else
+      case members_match?(name, expected_nodes) do
+        true  -> :ok
+        false ->
+          :timer.sleep(1000)
+          wait_until_members_match(name, expected_nodes, max_tries, tries + 1)
+      end
+    end
+  end
+
+  defp members_match?(name, [leader_node | _] = expected_nodes) do
+    try do
+      %{state_name: state, members: ms} = RaftedValue.status({name, leader_node})
+      state == :leader and MapSet.new(ms, &node/1) == MapSet.new(expected_nodes)
+    catch
+      :exit, _ -> false
     end
   end
 end

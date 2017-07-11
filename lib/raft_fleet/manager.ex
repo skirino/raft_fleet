@@ -4,16 +4,18 @@ alias Croma.TypeGen, as: TG
 defmodule RaftFleet.Manager do
   use GenServer
   require Logger
-  alias RaftFleet.{Cluster, ConsensusMemberSup, ConsensusMemberAdjuster, Activator, Deactivator, Config}
+  alias RaftFleet.{Cluster, ConsensusMemberSup, ConsensusMemberAdjuster, Activator, Deactivator, Config, ProcessAndDiskLogIndexInspector}
 
   defmodule State do
+    @type consensus_group_progress :: :leader_started | {:leader_delegated_to, node} | :process_exists | GenServer.from
+
     use Croma.Struct, fields: [
       adjust_timer:                 TG.nilable(Croma.Reference),
       adjust_worker:                TG.nilable(Croma.Pid),
       activate_worker:              TG.nilable(Croma.Pid),
       deactivate_worker:            TG.nilable(Croma.Pid),
       purge_wait_timer:             TG.nilable(Croma.Reference),
-      being_added_consensus_groups: Croma.Map, # %{atom => (:leader_started | GenServer.from)}
+      being_added_consensus_groups: Croma.Map, # %{atom => consensus_group_progress}
     ]
 
     def phase(%__MODULE__{adjust_timer: t, activate_worker: a, deactivate_worker: d}) do
@@ -26,14 +28,25 @@ defmodule RaftFleet.Manager do
     end
 
     defun update_being_added_consensus_groups(%__MODULE__{being_added_consensus_groups: gs} = s,
-                                              name  :: atom,
-                                              value :: :leader_started | GenServer.from) :: t do
-      case {gs[name], value} do
-        {:leader_started, {_, _} = from  } -> GenServer.reply(from, :ok); %__MODULE__{s | being_added_consensus_groups: Map.delete(gs, name)}
-        {{_, _} = from  , :leader_started} -> GenServer.reply(from, :ok); %__MODULE__{s | being_added_consensus_groups: Map.delete(gs, name)}
-        _                                  -> %__MODULE__{s | being_added_consensus_groups: Map.put(gs, name, value)}
+                                              name   :: atom,
+                                              value2 :: consensus_group_progress) :: t do
+      case gs[name] do
+        nil    -> %__MODULE__{s | being_added_consensus_groups: Map.put(gs, name, value2)}
+        value1 ->
+          case {gen_server_from?(value1), gen_server_from?(value2)} do
+            {true , false} -> GenServer.reply(value1, convert_to_reply(value2)); %__MODULE__{s | being_added_consensus_groups: Map.delete(gs, name)}
+            {false, true } -> GenServer.reply(value2, convert_to_reply(value1)); %__MODULE__{s | being_added_consensus_groups: Map.delete(gs, name)}
+            _              -> %__MODULE__{s | being_added_consensus_groups: Map.put(gs, name, value2)}
+          end
       end
     end
+
+    defp gen_server_from?({p, r}) when is_pid(p) and is_reference(r), do: true
+    defp gen_server_from?(_), do: false
+
+    defp convert_to_reply(:leader_started             ), do: {:ok, :leader_started}
+    defp convert_to_reply({:leader_delegated_to, node}), do: {:ok, {:leader_delegated_to, node}}
+    defp convert_to_reply(:process_exists             ), do: {:error, :process_exists}
   end
 
   defun start_link() :: GenServer.on_start do
@@ -85,24 +98,18 @@ defmodule RaftFleet.Manager do
   def handle_cast({:start_consensus_group_members, name, rv_config, member_nodes}, state) do
     if State.phase(state) in [:active, :activating] do
       # Spawn leader in this node (neglecting desired leader node defined by randezvous hashing) to avoid potential failures
-      additional_args = [{:create_new_consensus_group, rv_config}, name]
-      case Supervisor.start_child(ConsensusMemberSup, additional_args) do
-        {:ok, _pid} ->
-          # Concurrently spawning multiple followers may lead to race conditions,
-          # as adding a follower can only be done if no `uncommitted_membership_change` exists in the target consensus group.
-          # Although this race condition can be automatically resolved by retries and thus is harmless,
-          # we try to avoid it by waiting for a while for each follower, in order to reduce unnecessary crash logs.
-          List.delete(member_nodes, Node.self())
-          |> Enum.with_index()
-          |> Enum.each(fn {node, i} ->
-            start_consensus_group_follower(name, node, Node.self(), i * 100)
-          end)
-          {:noreply, State.update_being_added_consensus_groups(state, name, :leader_started)}
-        {:error, reason} ->
-          # If `reason` is `{:already_started, _pid}`, then the error is due to `RaftFleet.add_consensus_group/3`
-          # called after `RaftFleet.remove_consensus_group/1` and before the process is killed by `RaftFleet.ConsensusMemberAdjuster`.
-          Logger.info("error in starting 1st member process of consensus group #{name}: #{inspect(reason)}")
-          {:noreply, state}
+      case ProcessAndDiskLogIndexInspector.find_node_having_latest_log_index(name) do
+        {:ok, node_or_nil} ->
+          node_to_host_initial_leader = node_or_nil || Node.self()
+          if node_to_host_initial_leader == Node.self() do
+            new_state = start_leader_and_tell_other_nodes_to_start_follower(name, rv_config, member_nodes, state)
+            {:noreply, new_state}
+          else
+            start_consensus_group_members({__MODULE__, node_to_host_initial_leader}, name, rv_config, member_nodes)
+            {:noreply, State.update_being_added_consensus_groups(state, name, {:leader_delegated_to, node_to_host_initial_leader})}
+          end
+        {:error, :process_exists} ->
+          {:noreply, State.update_being_added_consensus_groups(state, name, :process_exists)}
       end
     else
       Logger.info("manager process is not active; cannot start member processes for consensus group #{name}")
@@ -121,6 +128,29 @@ defmodule RaftFleet.Manager do
       spawn_link(fn -> start_follower_with_retry(other_node_members, name, 3) end)
     end
     {:noreply, state}
+  end
+
+  defp start_leader_and_tell_other_nodes_to_start_follower(name, rv_config, member_nodes, state) do
+    additional_args = [{:create_new_consensus_group, rv_config}, name]
+    case Supervisor.start_child(ConsensusMemberSup, additional_args) do
+      {:ok, _pid} ->
+        tell_other_nodes_to_start_followers_with_delay(name, member_nodes)
+        State.update_being_added_consensus_groups(state, name, :leader_started)
+      {:error, reason} ->
+        Logger.info("error in starting 1st member process of consensus group #{name}: #{inspect(reason)}")
+        state
+    end
+  end
+
+  defp tell_other_nodes_to_start_followers_with_delay(name, member_nodes) do
+    # Concurrently spawning multiple followers may lead to race conditions (adding a node can only be done one-by-one).
+    # Although this race condition can be automatically resolved by retries and thus is harmless,
+    # we should try to minimize amount of unnecessary error logs.
+    List.delete(member_nodes, Node.self())
+    |> Enum.with_index()
+    |> Enum.each(fn {node, i} ->
+      start_consensus_group_follower(name, node, Node.self(), i * 100)
+    end)
   end
 
   defp start_follower_with_retry(_, _, 0), do: {:error, :cannot_start_child}
@@ -202,8 +232,11 @@ defmodule RaftFleet.Manager do
     GenServer.cast(__MODULE__, {:node_purge_candidate_changed, node_to_purge})
   end
 
-  defun start_consensus_group_members(name :: atom, rv_config :: RaftedValue.Config.t, member_nodes :: [node]) :: :ok do
-    GenServer.cast(__MODULE__, {:start_consensus_group_members, name, rv_config, member_nodes})
+  defun start_consensus_group_members(server       :: GenServer.server \\ __MODULE__,
+                                      name         :: atom,
+                                      rv_config    :: RaftedValue.Config.t,
+                                      member_nodes :: [node]) :: :ok do
+    GenServer.cast(server, {:start_consensus_group_members, name, rv_config, member_nodes})
   end
 
   defun start_consensus_group_follower(name :: atom, node :: node, leader_node_hint :: nil | node, delay :: non_neg_integer \\ 0) :: :ok do
