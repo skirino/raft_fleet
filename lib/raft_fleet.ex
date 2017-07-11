@@ -8,7 +8,7 @@ defmodule RaftFleet do
   use Application
   alias Supervisor.Spec
   alias RaftedValue.Data
-  alias RaftFleet.{Cluster, Manager, LeaderPidCache, LeaderPidCacheRefresher, ZoneId, Util}
+  alias RaftFleet.{Cluster, Manager, LeaderPidCache, LeaderPidCacheRefresher, ProcessAndDiskLogIndexInspector, ZoneId, Util}
 
   def start(_type, _args) do
     LeaderPidCache.init()
@@ -16,6 +16,7 @@ defmodule RaftFleet do
       Spec.supervisor(RaftFleet.ConsensusMemberSup, []),
       Spec.worker(Manager, []),
       Spec.worker(LeaderPidCacheRefresher, []),
+      Spec.worker(ProcessAndDiskLogIndexInspector, []),
     ]
     opts = [strategy: :one_for_one, name: RaftFleet.Supervisor]
     Supervisor.start_link(children, opts)
