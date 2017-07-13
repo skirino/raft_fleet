@@ -57,13 +57,7 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
             target_pid  = Enum.find(members, fn m -> node(m) == target_node end)
             RaftedValue.remove_follower(pid, target_pid)
           unresponsive_pids != [] ->
-            target_pid = Enum.random(unresponsive_pids)
-            case try_status(target_pid) do
-              :noproc ->
-                ret = RaftedValue.remove_follower(pid, target_pid)
-                Logger.info("A member (#{inspect(target_pid)}) in #{group_name} is definitely dead; remove it from the group: #{inspect(ret)}")
-              _ -> :ok
-            end
+            remove_dead_follower(group_name, pid, unresponsive_pids)
           true -> :ok
         end
         Enum.map(unresponsive_pids, &node/1)
@@ -103,6 +97,16 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
       RaftedValue.status(dest)
     catch
       :exit, {reason, _} -> reason # :noproc, {:nodedown, node}, :timeout
+    end
+  end
+
+  defp remove_dead_follower(group_name, leader, unresponsive_followers) do
+    target_pid = Enum.random(unresponsive_followers)
+    case try_status(target_pid) do
+      :noproc ->
+        ret = RaftedValue.remove_follower(leader, target_pid)
+        Logger.info("A member (#{inspect(target_pid)}) in #{group_name} is definitely dead; remove it from the group: #{inspect(ret)}")
+      _ -> :ok
     end
   end
 
