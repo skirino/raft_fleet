@@ -48,7 +48,7 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
     # Note: `leader_node == Node.self()` always holds, as this node is supposed to host leader process of this `group`
     case try_status(group_name) do
       %{state_name: :leader, from: pid, members: members, unresponsive_followers: unresponsive_pids} ->
-        follower_nodes_from_leader = Enum.map(members, &node/1) |> List.delete(leader_node) |> Enum.sort()
+        follower_nodes_from_leader = List.delete(members, pid) |> Enum.map(&node/1) |> Enum.sort()
         cond do
           (nodes_to_be_added = follower_nodes -- follower_nodes_from_leader) != [] ->
             Manager.start_consensus_group_follower(group_name, Enum.random(nodes_to_be_added), leader_node)
@@ -60,8 +60,8 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
             target_pid = Enum.random(unresponsive_pids)
             case try_status(target_pid) do
               :noproc ->
-                Logger.info("A member (#{inspect(target_pid)}) in #{group_name} is definitely dead; remove it from the group")
-                RaftedValue.remove_follower(pid, target_pid)
+                ret = RaftedValue.remove_follower(pid, target_pid)
+                Logger.info("A member (#{inspect(target_pid)}) in #{group_name} is definitely dead; remove it from the group: #{inspect(ret)}")
               _ -> :ok
             end
           true -> :ok
@@ -83,14 +83,14 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
           undesired_leader == nil and majority_of_members_definitely_died?(group_name, node_with_status_pairs, node_with_error_reason_pairs) ->
             # Something really bad happened to this consensus group and it's impossible to rescue the group to healthy state;
             # remove the group as a last resort (to prevent from repeatedly failing to add followers).
-            Logger.error("majority of members in #{group_name} have failed; remove the group as a last resort")
-            RaftFleet.remove_consensus_group(group_name)
+            ret = RaftFleet.remove_consensus_group(group_name)
+            Logger.error("majority of members in #{group_name} have failed; remove the group as a last resort: #{inspect(ret)}")
           (nodes_to_be_added = desired_member_nodes -- nodes_with_living_members) != [] ->
             Manager.start_consensus_group_follower(group_name, Enum.random(nodes_to_be_added), nil)
           undesired_leader != nil ->
             # As the previous cond branch doesn't match, there must be a member process in this node; replace the leader
-            Logger.info("migrating leader of #{group_name} in #{node(undesired_leader)} to the member in this node")
-            RaftedValue.replace_leader(undesired_leader, Process.whereis(group_name))
+            ret = RaftedValue.replace_leader(undesired_leader, Process.whereis(group_name))
+            Logger.info("migrating leader of #{group_name} in #{node(undesired_leader)} to the member in this node: #{inspect(ret)}")
           true -> :ok
         end
         []
