@@ -153,6 +153,42 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
     end)
   end
 
+  test "adjust_one_step/3 should not start new follower in node with a dead member and instead remove the dead member" do
+    with_active_slaves([:"2", :"3", :"4"], fn ->
+      [
+        {[1, 2, 3]   , 1, [1, 2]      , [] }, # `3` is definitely dead, remove
+        {[1, 2, 4]   , 1, [1, 2, 3, 4], [4]}, # `3` is missing, add
+        {[2, 1, 3]   , 2, [1, 2]      , [] }, # want to add `3` but there's dead pid, remove it first
+        {[2, 1, 4]   , 2, [1, 2, 3, 4], [4]}, # `3` is missing, add
+        {[1, 2, 3, 4], 1, [1, 2, 3]   , [] }, # `4` is definitely dead, remove
+        {[1, 2, 4, 3], 1, [1, 2, 3]   , [3]}, # `4` is extra, remove
+        {[2, 1, 3, 4], 1, [1, 2, 3, 4], [4]}, # nothing to add, replace leader to `1`
+        {[2, 1, 4, 3], 2, [1, 2, 4]   , [] }, # want to add `3` but there's dead pid, remove it first
+      ]
+      |> Enum.each(fn {[leader_node | follower_nodes], expected_leader_node, expected_member_nodes, unresponsive_member_nodes} ->
+        start_leader_and_followers(i2node(leader_node), Enum.map(follower_nodes, &i2node/1))
+        follower_pid_to_kill = Process.whereis(@group_name) |> at(i2node(List.last(follower_nodes)))
+        assert :gen_fsm.stop(follower_pid_to_kill) == :ok
+        :timer.sleep(2_000) # wait until the leader recognize the killed pid as "unhealthy"
+
+        status1 = RaftedValue.status({@group_name, i2node(leader_node)})
+        assert status1.state_name                                == :leader
+        assert Enum.map(status1.members, &node/1) |> Enum.sort() == Enum.map([leader_node | follower_nodes], &i2node/1) |> Enum.sort()
+        assert status1.unresponsive_followers                    == [follower_pid_to_kill]
+        call_adjust_one_step()
+        status2 = RaftedValue.status({@group_name, i2node(expected_leader_node)})
+        assert status2.state_name                                               == :leader
+        assert Enum.map(status2.members, &node/1) |> Enum.sort()                == Enum.map(expected_member_nodes, &i2node/1)
+        assert Enum.map(status2.unresponsive_followers, &node/1) |> Enum.sort() == Enum.map(unresponsive_member_nodes, &i2node/1)
+
+        kill_all_consensus_members()
+        Path.wildcard("tmp/*/*")
+        |> Enum.reject(&String.ends_with?(&1, Atom.to_string(RaftFleet.Cluster)))
+        |> Enum.each(&File.rm_rf!/1)
+      end)
+    end)
+  end
+
   test "adjust_one_step/3 should find out members in deactivated-but-still-connected nodes and migrate them to active nodes" do
     with_active_slaves([:"2", :"3", :"4", :"5", :"6"], fn ->
       nodes_half1 = Enum.map([1, 2, 3], &i2node/1)
