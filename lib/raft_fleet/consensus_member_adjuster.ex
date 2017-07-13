@@ -86,7 +86,8 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
             ret = RaftFleet.remove_consensus_group(group_name)
             Logger.error("majority of members in #{group_name} have failed; remove the group as a last resort: #{inspect(ret)}")
           (nodes_to_be_added = desired_member_nodes -- nodes_with_living_members) != [] ->
-            Manager.start_consensus_group_follower(group_name, Enum.random(nodes_to_be_added), nil)
+            leader_node_hint = if undesired_leader, do: node(undesired_leader), else: nil
+            Manager.start_consensus_group_follower(group_name, Enum.random(nodes_to_be_added), leader_node_hint)
           undesired_leader != nil ->
             # As the previous cond branch doesn't match, there must be a member process in this node; replace the leader
             ret = RaftedValue.replace_leader(undesired_leader, Process.whereis(group_name))
