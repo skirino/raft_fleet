@@ -48,7 +48,7 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
     # Note: `leader_node == Node.self()` always holds, as this node is supposed to host leader process of this `group`
     case try_status(group_name) do
       %{state_name: :leader, from: pid, members: members, unresponsive_followers: unresponsive_pids} ->
-        follower_nodes_from_leader = Enum.map(members, &node/1) |> List.delete(leader_node) |> Enum.sort
+        follower_nodes_from_leader = Enum.map(members, &node/1) |> List.delete(leader_node) |> Enum.sort()
         cond do
           (nodes_to_be_added = follower_nodes -- follower_nodes_from_leader) != [] ->
             Manager.start_consensus_group_follower(group_name, Enum.random(nodes_to_be_added), leader_node)
