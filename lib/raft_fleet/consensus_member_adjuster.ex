@@ -146,13 +146,13 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
 
   defp find_leader_from_statuses([]), do: {nil, nil}
   defp find_leader_from_statuses(statuses) do
-    statuses_by_term = Enum.group_by(statuses, fn %{current_term: t} -> t end)
-    latest_term = Map.keys(statuses_by_term) |> Enum.max()
-    statuses_by_term[latest_term]
-    |> Enum.find_value({nil, nil}, fn
-      %{state_name: :leader, from: from} = s -> {from, s}
-      _                                      -> nil
-    end)
+    Enum.filter(statuses, &match?(%{state_name: :leader}, &1))
+    |> case do
+      [] -> {nil, nil}
+      ss ->
+        s = Enum.max_by(ss, &(&1.current_term))
+        {s.leader, s}
+    end
   end
 
   defp adjust_cluster_consensus_members(leader_pid) do
