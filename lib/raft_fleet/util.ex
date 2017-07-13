@@ -3,7 +3,7 @@ use Croma
 defmodule RaftFleet.Util do
   alias RaftFleet.LeaderPidCache
 
-  def find_leader_and_cache(name) do
+  defun find_leader_and_cache(name :: atom) :: nil | pid do
     case find_leader(name) do
       nil -> nil
       pid ->
@@ -12,7 +12,7 @@ defmodule RaftFleet.Util do
     end
   end
 
-  defp find_leader(name) do
+  defunp find_leader(name :: atom) :: nil | pid do
     [Node.self() | Node.list()]
     |> Enum.map(fn node -> try_status({name, node}) end)
     |> Enum.filter(&match?(%{leader: p} when is_pid(p), &1))

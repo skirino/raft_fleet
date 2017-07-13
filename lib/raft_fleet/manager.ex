@@ -67,7 +67,7 @@ defmodule RaftFleet.Manager do
   end
   def handle_call(:deactivate, _from, state) do
     if State.phase(state) == :active do
-      new_state = %State{state | deactivate_worker: start_worker(Deactivator, :deactivate, [])} |> stop_timer
+      new_state = %State{state | deactivate_worker: start_worker(Deactivator, :deactivate, [])} |> stop_timer()
       {:reply, :ok, new_state}
     else
       {:reply, {:error, :inactive}, state}

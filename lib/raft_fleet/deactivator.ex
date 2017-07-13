@@ -67,7 +67,7 @@ defmodule RaftFleet.Deactivator do
   defp pick_next_leader(current_leader, other_members) do
     # We don't want to migrate the current leader to an inactive node; check currently active nodes before choosing a member.
     {:ok, nodes_per_zone} = RaftedValue.query(current_leader, :active_nodes)
-    nodes = Map.values(nodes_per_zone) |> List.flatten |> MapSet.new
+    nodes = Map.values(nodes_per_zone) |> List.flatten() |> MapSet.new()
     case Enum.filter(other_members, &(node(&1) in nodes)) do
       []                      -> nil
       members_in_active_nodes -> Enum.random(members_in_active_nodes)
