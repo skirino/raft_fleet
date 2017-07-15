@@ -102,7 +102,7 @@ defmodule SlaveNode do
   end
 
   def zone(node, n) do
-    i = Atom.to_string(node) |> String.split("@") |> hd() |> String.to_integer |> rem(n)
+    i = Atom.to_string(node) |> String.split("@") |> hd() |> String.to_integer() |> rem(n)
     "zone#{i}"
   end
 end

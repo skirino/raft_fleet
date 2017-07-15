@@ -229,6 +229,9 @@ defmodule RaftFleet do
 
   @doc """
   Tries to find the current leader of the consensus group specified by `name`.
+
+  Usually you don't have to use this function as `command/5` and `query/5` automatically resolves where the leader resides.
+  This function is useful when you want to inspect status of a consensus group by using e.g. `RaftedValue.status/1`.
   """
   defun whereis_leader(name :: g[atom]) :: nil | pid do
     case LeaderPidCache.get(name) do

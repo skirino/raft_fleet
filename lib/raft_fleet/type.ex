@@ -55,7 +55,7 @@ defmodule RaftFleet.UnhealthyMembersCountsMap do
   end
 end
 
-if Mix.env == :test do
+if Mix.env() == :test do
   # To run code within slave nodes during tests, all modules must be compiled into beam files (i.e. they can't load .exs files)
   defmodule RaftFleet.JustAnInt do
     @behaviour RaftedValue.Data
