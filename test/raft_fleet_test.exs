@@ -183,8 +183,8 @@ defmodule RaftFleetTest do
       :timer.sleep(25_000) # members in `node_to_fail` are recognized as unhealthy, `node_purge_failure_time_window` elapses, then rebalances
       assert_members_well_distributed(@n_consensus_groups)
 
+      refute node_to_fail in Node.list()
       status = RaftedValue.status(RaftFleet.Cluster)
-      assert status.state_name == :leader
       assert length(status.members) == length(Node.list()) + 1
       assert Enum.all?(status.members, fn pid -> node(pid) != node_to_fail end)
     end)
