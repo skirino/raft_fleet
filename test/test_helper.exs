@@ -121,3 +121,24 @@ defmodule PersistenceSetting do
     Application.put_env(:raft_fleet, :persistence_dir_parent, Path.join("tmp", Atom.to_string(longname))) |> at(longname)
   end
 end
+
+defmodule TestCaseTemplate do
+  use ExUnit.CaseTemplate
+
+  setup_all do
+    Node.start(:"1", :shortnames)
+    :ok
+  end
+
+  setup do
+    # For clean testing we restart :raft_fleet
+    :ok = Application.stop(:raft_fleet)
+    PersistenceSetting.randomly_pick_whether_to_persist()
+    File.rm_rf!("tmp")
+    :ok = Application.start(:raft_fleet)
+    on_exit(fn ->
+      Application.delete_env(:raft_fleet, :persistence_dir_parent)
+      File.rm_rf!("tmp")
+    end)
+  end
+end

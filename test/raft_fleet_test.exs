@@ -1,26 +1,9 @@
 defmodule RaftFleetTest do
-  use ExUnit.Case
+  use TestCaseTemplate
   @moduletag timeout: 200_000
 
   import SlaveNode
   alias RaftFleet.ConsensusMemberSup
-
-  setup_all do
-    Node.start(:"1", :shortnames) # Note that epmd is not automatically started by just executing `mix test`
-    :ok
-  end
-
-  setup do
-    # For clean testing we restart :raft_fleet
-    :ok = Application.stop(:raft_fleet)
-    File.rm_rf!("tmp")
-    PersistenceSetting.randomly_pick_whether_to_persist()
-    :ok = Application.start(:raft_fleet)
-    on_exit(fn ->
-      Application.delete_env(:raft_fleet, :persistence_dir_parent)
-      File.rm_rf!("tmp")
-    end)
-  end
 
   @n_consensus_groups 60
   @rv_config_options  [
