@@ -61,4 +61,9 @@ defmodule RaftFleet.Config do
   defun persistence_dir_parent() :: nil | Path.t do
     Application.get_env(:raft_fleet, :persistence_dir_parent)
   end
+
+  @doc false
+  defun rafted_value_test_inject_fault_after_add_follower() :: nil | :raise | :timeout do
+    Application.get_env(:raft_fleet, :rafted_value_test_inject_fault_after_add_follower)
+  end
 end

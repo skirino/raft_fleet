@@ -153,14 +153,34 @@ defmodule RaftFleet.Manager do
     end)
   end
 
-  defp start_follower_with_retry(_, _, 0), do: {:error, :cannot_start_child}
+  defp start_follower_with_retry(_, name, 0) do
+    Logger.error("give up adding follower for #{name} due to consecutive failures")
+    {:error, :cannot_start_child}
+  end
   defp start_follower_with_retry(other_node_members, name, tries_remaining) do
     case Supervisor.start_child(ConsensusMemberSup, [{:join_existing_consensus_group, other_node_members}, name]) do
       {:ok, pid}                        -> {:ok, pid}
       {:error, {:already_started, pid}} -> {:ok, pid}
-      {:error, _}                       ->
+      {:error, reason}                  ->
+        case extract_dead_follower_pid_from_reason(reason) do
+          nil               -> :ok
+          dead_follower_pid -> spawn(fn -> try_to_remove_dead_follower(name, dead_follower_pid) end)
+        end
         :timer.sleep(500)
         start_follower_with_retry(other_node_members, name, tries_remaining - 1)
+    end
+  end
+
+  defp extract_dead_follower_pid_from_reason({%RaftedValue.AddFollowerError{pid: pid}, _stacktrace}   ), do: pid
+  defp extract_dead_follower_pid_from_reason({:timeout, {_mod, _fun, [_server, {:add_follower, pid}]}}), do: pid
+  defp extract_dead_follower_pid_from_reason(_                                                        ), do: nil
+
+  defp try_to_remove_dead_follower(name, dead_follower_pid) do
+    case RaftFleet.whereis_leader(name) do
+      nil    -> :ok
+      leader ->
+        :timer.sleep(100) # reduce possibility of race condition: `:uncommitted_membership_change`
+        RaftedValue.remove_follower(leader, dead_follower_pid)
     end
   end
 

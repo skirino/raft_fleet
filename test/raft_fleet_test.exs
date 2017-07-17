@@ -253,6 +253,49 @@ defmodule RaftFleetTest do
     end)
   end
 
+  test "Manager.start_consensus_group_follower/4 should retry with removing failed follower" do
+    with_slaves([:"2", :"3", :"4", :"5", :"6"], fn ->
+      all_nodes = [Node.self() | Node.list()]
+      with_active_nodes(all_nodes, &zone(&1, 2), fn ->
+        name = :consensus1
+        assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
+        [leader_node | _] = expected_nodes = wait_until_members_fully_migrate(name)
+        disable_periodic_adjuster_process(fn ->
+          [target_node] = RaftFleet.NodesPerZone.lrw_members(RaftFleet.active_nodes(), name, 4) -- expected_nodes
+          cause_error_in_newly_added_follower(fn ->
+            RaftFleet.Manager.start_consensus_group_follower(name, target_node, leader_node)
+            :timer.sleep(700) # should fail twice during this sleep
+          end)
+          _ = wait_until_members_fully_migrate(name, 4, 5)
+        end)
+      end)
+    end)
+  end
+
+  defp disable_periodic_adjuster_process(f) do
+    all_nodes = [Node.self() | Node.list()]
+    Enum.each(all_nodes, fn n ->
+      Application.put_env(:raft_fleet, :balancing_interval, 300_000) |> at(n)
+    end)
+    :timer.sleep(1000)
+    f.()
+    Enum.each(all_nodes, fn n ->
+      Application.delete_env(:raft_fleet, :balancing_interval) |> at(n)
+    end)
+  end
+
+  defp cause_error_in_newly_added_follower(f) do
+    all_nodes = [Node.self() | Node.list()]
+    Enum.each(all_nodes, fn n ->
+      value = Enum.random([:raise, :timeout])
+      Application.put_env(:raft_fleet, :rafted_value_test_inject_fault_after_add_follower, value) |> at(n)
+    end)
+    f.()
+    Enum.each(all_nodes, fn n ->
+      Application.delete_env(:raft_fleet, :rafted_value_test_inject_fault_after_add_follower) |> at(n)
+    end)
+  end
+
   test "state of a removed consensus group should be restored from latest snapshot/log files on restart" do
     slave_shortnames = Enum.map(2 .. 12, fn i -> :"#{i}" end)
     with_slaves(slave_shortnames, :yes, fn ->
@@ -260,7 +303,7 @@ defmodule RaftFleetTest do
         group_names = Enum.map(1 .. 5, fn i -> :"c#{i}" end)
         Enum.each(group_names, fn name ->
           assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
-          [leader_node | _] = wait_until_members_fully_migrate(name, 8)
+          [leader_node | _] = wait_until_members_fully_migrate(name)
 
           Enum.each(0 .. 9, fn i ->
             assert RaftFleet.command(name, :inc) == {:ok, i}
@@ -270,7 +313,7 @@ defmodule RaftFleetTest do
           Enum.each(pids, &monitor_wait/1)
 
           assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
-          _ = wait_until_members_fully_migrate(name, 8)
+          _ = wait_until_members_fully_migrate(name)
           {:leader, state} = :sys.get_state({name, leader_node})
           assert state.data == 10 # The state should be correctly restored, regardless of whether Cluster leader node was included in the consensus or not
         end)
@@ -285,8 +328,8 @@ defmodule RaftFleetTest do
     end
   end
 
-  defp wait_until_members_fully_migrate(name, max_tries) do
-    expected_nodes = RaftFleet.NodesPerZone.lrw_members(RaftFleet.active_nodes(), name, 3)
+  defp wait_until_members_fully_migrate(name, n_members \\ 3, max_tries \\ 10) do
+    expected_nodes = RaftFleet.NodesPerZone.lrw_members(RaftFleet.active_nodes(), name, n_members)
     wait_until_members_match(name, expected_nodes, max_tries, 0)
     expected_nodes
   end
@@ -306,8 +349,8 @@ defmodule RaftFleetTest do
 
   defp members_match?(name, [leader_node | _] = expected_nodes) do
     try do
-      %{state_name: state, members: ms} = RaftedValue.status({name, leader_node})
-      state == :leader and MapSet.new(ms, &node/1) == MapSet.new(expected_nodes)
+      %{state_name: state, members: ms, unresponsive_followers: unresponsive} = RaftedValue.status({name, leader_node})
+      state == :leader and unresponsive == [] and MapSet.new(ms, &node/1) == MapSet.new(expected_nodes)
     catch
       :exit, _ -> false
     end
