@@ -84,7 +84,7 @@ defmodule RaftFleetTest do
     client_pids     = Enum.map(consensus_names, &start_consensus_group/1)
 
     # follower processes should automatically be spawned afterwards
-    :timer.sleep(25_000)
+    :timer.sleep(30_000)
     assert_members_well_distributed(@n_consensus_groups)
 
     f.()
@@ -149,13 +149,13 @@ defmodule RaftFleetTest do
       Enum.each(nodes2, &activate_node(&1, zone_fun))
 
       # after several adjustments consensus members should be re-distributed
-      :timer.sleep(25_000)
+      :timer.sleep(30_000)
       assert_members_well_distributed(@n_consensus_groups)
 
       # deactivate/remove nodes one by one; clients should be able to interact with consensus leaders
       Enum.each(nodes1, fn n ->
         deactivate_node(n)
-        :timer.sleep(5_000)
+        :timer.sleep(8_000)
         assert_members_well_distributed(@n_consensus_groups)
       end)
     end)
@@ -180,7 +180,7 @@ defmodule RaftFleetTest do
 
     with_consensus_groups_and_their_clients(fn ->
       stop_slave(node_to_fail)
-      :timer.sleep(25_000) # members in `node_to_fail` are recognized as unhealthy, `node_purge_failure_time_window` elapses, then rebalances
+      :timer.sleep(30_000) # members in `node_to_fail` are recognized as unhealthy, `node_purge_failure_time_window` elapses, then rebalances
       assert_members_well_distributed(@n_consensus_groups)
 
       refute node_to_fail in Node.list()
@@ -266,7 +266,7 @@ defmodule RaftFleetTest do
             RaftFleet.Manager.start_consensus_group_follower(name, target_node, leader_node)
             :timer.sleep(700) # should fail twice during this sleep
           end)
-          _ = wait_until_members_fully_migrate(name, 4, 5)
+          _ = wait_until_members_fully_migrate(name, 4, 8)
         end)
       end)
     end)
@@ -328,7 +328,7 @@ defmodule RaftFleetTest do
     end
   end
 
-  defp wait_until_members_fully_migrate(name, n_members \\ 3, max_tries \\ 10) do
+  defp wait_until_members_fully_migrate(name, n_members \\ 3, max_tries \\ 12) do
     expected_nodes = RaftFleet.NodesPerZone.lrw_members(RaftFleet.active_nodes(), name, n_members)
     wait_until_members_match(name, expected_nodes, max_tries, 0)
     expected_nodes

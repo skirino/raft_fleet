@@ -1,5 +1,7 @@
 defmodule RaftFleet.ConsensusMemberAdjusterTest do
   use TestCaseTemplate
+  @moduletag timeout: 200_000
+
   import SlaveNode
   alias RaftFleet.{ConsensusMemberAdjuster, Manager, ConsensusMemberSup}
 
@@ -24,7 +26,7 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
   defp start_leader_and_followers(leader_node, follower_nodes, group_name \\ @group_name) do
     Manager.start_consensus_group_members(group_name, @rv_config, []) |> at(leader_node)
     Enum.each(follower_nodes, fn n ->
-      :timer.sleep(500)
+      :timer.sleep(1000)
       Manager.start_consensus_group_follower(group_name, n, leader_node)
     end)
     :timer.sleep(1000)
@@ -33,7 +35,7 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
   defp call_adjust_one_step(group_name \\ @group_name) do
     desired_member_nodes = Enum.map([1, 2, 3], &i2node/1)
     ConsensusMemberAdjuster.adjust_one_step([Node.self() | Node.list()], group_name, desired_member_nodes)
-    :timer.sleep(1000)
+    :timer.sleep(1500)
   end
 
   defp kill_all_consensus_members() do
@@ -151,8 +153,8 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
       |> Enum.each(fn {[leader_node | follower_nodes], expected_leader_node, expected_member_nodes, unresponsive_member_nodes} ->
         start_leader_and_followers(i2node(leader_node), Enum.map(follower_nodes, &i2node/1))
         follower_pid_to_kill = Process.whereis(@group_name) |> at(i2node(List.last(follower_nodes)))
-        assert :gen_fsm.stop(follower_pid_to_kill) == :ok
-        :timer.sleep(2_000) # wait until the leader recognize the killed pid as "unhealthy"
+        assert :gen_statem.stop(follower_pid_to_kill) == :ok
+        :timer.sleep(2_500) # wait until the leader recognize the killed pid as "unhealthy"
 
         status1 = RaftedValue.status({@group_name, i2node(leader_node)})
         assert status1.state_name                                == :leader

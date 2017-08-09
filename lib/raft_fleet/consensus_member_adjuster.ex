@@ -27,7 +27,7 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
   defp stop_local_member(group_name) do
     case Process.whereis(group_name) do
       nil -> :ok
-      pid -> :gen_fsm.stop(pid)
+      pid -> :gen_statem.stop(pid)
     end
   end
 
