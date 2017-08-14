@@ -171,9 +171,9 @@ defmodule RaftFleet.Manager do
     end
   end
 
-  defp extract_dead_follower_pid_from_reason({%RaftedValue.AddFollowerError{pid: pid}, _stacktrace}   ), do: pid
-  defp extract_dead_follower_pid_from_reason({:timeout, {_mod, _fun, [_server, {:add_follower, pid}]}}), do: pid
-  defp extract_dead_follower_pid_from_reason(_                                                        ), do: nil
+  defp extract_dead_follower_pid_from_reason(%RaftedValue.AddFollowerError{pid: pid}                            ), do: pid
+  defp extract_dead_follower_pid_from_reason({:timeout, {_mod, _fun, [_server, {:add_follower, pid}, _timeout]}}), do: pid
+  defp extract_dead_follower_pid_from_reason(_                                                                  ), do: nil
 
   defp try_to_remove_dead_follower(name, dead_follower_pid) do
     case RaftFleet.whereis_leader(name) do
