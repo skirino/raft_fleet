@@ -70,7 +70,7 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
         all_nodes_without_self = MapSet.delete(all_nodes, leader_node)
         node_with_status_or_reason_pairs0 = Enum.map(all_nodes_without_self, fn n -> {n, try_status({group_name, n})} end)
         node_with_status_or_reason_pairs  = [{leader_node, status_or_reason} | node_with_status_or_reason_pairs0]
-        {node_with_status_pairs, node_with_error_reason_pairs} = Enum.partition(node_with_status_or_reason_pairs, &match?({_, %{}}, &1))
+        {node_with_status_pairs, node_with_error_reason_pairs} = Enum.split_with(node_with_status_or_reason_pairs, &match?({_, %{}}, &1))
         nodes_with_living_members = Enum.map(node_with_status_pairs, &elem(&1, 0))
         {undesired_leader, undesired_leader_status} = Enum.map(node_with_status_pairs, &elem(&1, 1)) |> find_leader_from_statuses()
         nodes_missing                = desired_member_nodes -- nodes_with_living_members
@@ -122,7 +122,7 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
       all_nodes = (node_with_status_pairs ++ node_with_error_reason_pairs) |> Enum.map(&elem(&1, 0))
       {node_with_status_pairs_after_sleep, node_with_error_reason_pairs_after_sleep} =
         Enum.map(all_nodes, fn n -> {n, try_status({group_name, n})} end)
-        |> Enum.partition(&match?({_, %{}}, &1))
+        |> Enum.split_with(&match?({_, %{}}, &1))
       majority_of_members_absent?(node_with_status_pairs_after_sleep, node_with_error_reason_pairs_after_sleep)
     else
       false

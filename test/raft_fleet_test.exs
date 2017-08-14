@@ -1,6 +1,6 @@
 defmodule RaftFleetTest do
   use TestCaseTemplate
-  @moduletag timeout: 200_000
+  @moduletag timeout: 300_000
 
   import SlaveNode
   alias RaftFleet.ConsensusMemberSup
