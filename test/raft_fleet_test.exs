@@ -1,6 +1,6 @@
 defmodule RaftFleetTest do
   use TestCaseTemplate
-  @moduletag timeout: 300_000
+  @moduletag timeout: 200_000
 
   import SlaveNode
   alias RaftFleet.ConsensusMemberSup
@@ -300,23 +300,21 @@ defmodule RaftFleetTest do
     slave_shortnames = Enum.map(2 .. 12, fn i -> :"#{i}" end)
     with_slaves(slave_shortnames, :yes, fn ->
       with_active_nodes([Node.self() | Node.list()], &zone(&1, 2), fn ->
-        group_names = Enum.map(1 .. 5, fn i -> :"c#{i}" end)
-        Enum.each(group_names, fn name ->
-          assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
-          [leader_node | _] = wait_until_members_fully_migrate(name)
+        name = :consensus1
+        assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
+        [leader_node | _] = wait_until_members_fully_migrate(name)
 
-          Enum.each(0 .. 9, fn i ->
-            assert RaftFleet.command(name, :inc) == {:ok, i}
-          end)
-          pids = RaftedValue.status({name, leader_node}).members
-          assert RaftFleet.remove_consensus_group(name) == :ok
-          Enum.each(pids, &monitor_wait/1)
-
-          assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
-          _ = wait_until_members_fully_migrate(name)
-          {:leader, state} = :sys.get_state({name, leader_node})
-          assert state.data == 10 # The state should be correctly restored, regardless of whether Cluster leader node was included in the consensus or not
+        Enum.each(0 .. 9, fn i ->
+          assert RaftFleet.command(name, :inc) == {:ok, i}
         end)
+        pids = RaftedValue.status({name, leader_node}).members
+        assert RaftFleet.remove_consensus_group(name) == :ok
+        Enum.each(pids, &monitor_wait/1)
+
+        assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
+        _ = wait_until_members_fully_migrate(name)
+        {:leader, state} = :sys.get_state({name, leader_node})
+        assert state.data == 10 # The state should be correctly restored, regardless of whether Cluster leader node was included in the consensus or not
       end)
     end)
   end
