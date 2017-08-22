@@ -12,7 +12,7 @@ end
 
 defmodule RaftFleet.ZoneId do
   @type t :: any
-  def validate(t), do: {:ok, t}
+  def valid?(_), do: true
 end
 
 defmodule RaftFleet.ConsensusGroups do
