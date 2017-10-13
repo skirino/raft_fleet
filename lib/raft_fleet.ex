@@ -84,16 +84,15 @@ defmodule RaftFleet do
                             n_replica :: g[pos_integer],
                             rv_config = %RaftedValue.Config{}) :: :ok | {:error, :already_added | :no_leader | any} do
     ref = make_ref()
-    call_result =
-      call_with_retry(Cluster, @default_retry + 1, @default_retry_interval, fn pid ->
-        leader_node = node(pid)
-        command_arg = {:add_group, name, n_replica, rv_config, leader_node}
-        case RaftedValue.command(pid, command_arg, @default_timeout, ref) do
-          {:ok, r}        -> {:ok, {leader_node, r}}
-          {:error, _} = e -> e
-        end
-      end)
-    case call_result do
+    call_with_retry(Cluster, @default_retry + 1, @default_retry_interval, fn pid ->
+      leader_node = node(pid)
+      command_arg = {:add_group, name, n_replica, rv_config, leader_node}
+      case RaftedValue.command(pid, command_arg, @default_timeout, ref) do
+        {:ok, r}        -> {:ok, {leader_node, r}}
+        {:error, _} = e -> e
+      end
+    end)
+    |> case do
       {:ok, {leader_node, {:ok, _nodes}}} ->
         try do
           case GenServer.call({Manager, leader_node}, {:await_completion_of_adding_consensus_group, name}) do

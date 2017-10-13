@@ -11,7 +11,7 @@ defmodule RaftFleetTest do
   ]
   @rv_config RaftedValue.make_config(RaftFleet.JustAnInt, @rv_config_options)
 
-  test "add_consensus_group/3 right after remove_consensus_group/1 should return {:error, :process_exists} and should not do nothing" do
+  test "add_consensus_group/3 right after remove_consensus_group/1 should return {:error, :process_exists} and should not do anything" do
     with_active_nodes([Node.self()], &zone(&1, 1), fn ->
       Enum.each(1 .. 10, fn i ->
         name = :"consensus#{i}"
