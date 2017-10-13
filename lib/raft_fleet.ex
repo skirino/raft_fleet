@@ -79,10 +79,14 @@ defmodule RaftFleet do
   If you configure `raft_fleet` to persist Raft logs & snapshots (see `:persistence_dir_parent` in `RaftFleet.Config`)
   and the consensus group with `name` had been removed by `remove_consensus_group/1`,
   then `add_consensus_group/3` will restore the state of the consensus group from the snapshot and log files.
+
+  The caller is blocked until the newly spawned leader becomes ready.
+  `await_timeout` specifies how many milliseconds to wait for the initialization.
   """
   defun add_consensus_group(name      :: g[atom],
                             n_replica :: g[pos_integer],
-                            rv_config = %RaftedValue.Config{}) :: :ok | {:error, :already_added | :no_leader | any} do
+                            rv_config = %RaftedValue.Config{},
+                            await_timeout :: g[pos_integer] \\ 5_000) :: :ok | {:error, :already_added | :no_leader | any} do
     ref = make_ref()
     call_with_retry(Cluster, @default_retry + 1, @default_retry_interval, fn pid ->
       leader_node = node(pid)
@@ -95,19 +99,18 @@ defmodule RaftFleet do
     |> case do
       {:ok, {leader_node, {:ok, _nodes}}} ->
         try do
-          case GenServer.call({Manager, leader_node}, {:await_completion_of_adding_consensus_group, name}) do
+          msg = {:await_completion_of_adding_consensus_group, name}
+          case GenServer.call({Manager, leader_node}, msg, await_timeout) do
             {:ok, :leader_started}                        -> :ok
             {:ok, {:leader_delegated_to, delegated_node}} ->
-              {:ok, :leader_started} = GenServer.call({Manager, delegated_node}, {:await_completion_of_adding_consensus_group, name})
+              {:ok, :leader_started} = GenServer.call({Manager, delegated_node}, msg, await_timeout)
               :ok
             {:error, :process_exists} ->
               remove_consensus_group(name)
               {:error, :process_exists}
           end
         catch
-          :exit, reason -> # Something went wrong! Try to rollback the added consensus group
-            remove_consensus_group(name)
-            {:error, reason}
+          :exit, reason -> {:error, reason}
         end
       {:ok, {_leader_node, {:error, _reason} = e}} -> e
       {:error, :no_leader} = e                     -> e
