@@ -101,7 +101,7 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
     try do
       RaftedValue.status(dest)
     catch
-      :exit, {reason, _} -> reason # :noproc, {:nodedown, node}, :timeout
+      :exit, {reason, _} -> reason # :noproc | {:nodedown, node} | :timeout
     end
   end
 

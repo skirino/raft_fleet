@@ -1,6 +1,6 @@
 # RaftFleet
 
-Elixir library to run multiple [Raft](https://raft.github.io/) consensus groups in a cluster of Erlang VMs
+Elixir library to run multiple [Raft](https://raft.github.io/) consensus groups in a cluster of ErlangVMs
 
 - [API Documentation](http://hexdocs.pm/raft_fleet/)
 - [Hex package information](https://hex.pm/packages/raft_fleet)
@@ -28,13 +28,13 @@ $ iex --sname 1 -S mix
 iex(1@skirino-Manjaro)>
 
 $ iex --sname 2 -S mix
-iex(2@skirino-Manjaro)> Node.connect :"1@skirino-Manjaro"
+iex(2@skirino-Manjaro)> Node.connect(:"1@skirino-Manjaro")
 
 $ iex --sname 3 -S mix
-iex(3@skirino-Manjaro)> Node.connect :"1@skirino-Manjaro"
+iex(3@skirino-Manjaro)> Node.connect(:"1@skirino-Manjaro")
 
 $ iex --sname 4 -S mix
-iex(4@skirino-Manjaro)> Node.connect :"1@skirino-Manjaro"
+iex(4@skirino-Manjaro)> Node.connect(:"1@skirino-Manjaro")
 ```
 
 Load the following module that implements `RaftedValue.Data` behaviour on all nodes in the cluster.
@@ -42,7 +42,7 @@ Load the following module that implements `RaftedValue.Data` behaviour on all no
 ```ex
 defmodule JustAnInt do
   @behaviour RaftedValue.Data
-  def new, do: 0
+  def new(), do: 0
   def command(i, {:set, j}), do: {i, j    }
   def command(i, :inc     ), do: {i, i + 1}
   def query(i, :get), do: i

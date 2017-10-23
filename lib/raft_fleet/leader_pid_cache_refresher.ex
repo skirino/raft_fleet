@@ -2,7 +2,7 @@ use Croma
 
 defmodule RaftFleet.LeaderPidCacheRefresher do
   @moduledoc """
-  A GenServer that periodically fetches all locally-stored leader pid caches and refresh stale ones.
+  A GenServer that periodically fetches all locally-stored leader pid caches and refreshes stale ones.
   """
 
   use GenServer
