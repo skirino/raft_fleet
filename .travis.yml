@@ -4,5 +4,5 @@ elixir:
   - 1.5.2
 otp_release:
   - 19.3
-  - 20.0
+  - 20.1
 script: "epmd -daemon && MIX_ENV=test mix do deps.get, deps.compile, test --cover"
