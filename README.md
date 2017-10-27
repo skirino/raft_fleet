@@ -86,3 +86,11 @@ iex(3@skirino-Manjaro)> RaftFleet.query(:consensus1, :get)
 ```
 
 Adding/removing nodes triggers rebalancing of consensus member processes.
+
+## Links
+
+- [Raft official website](https://raft.github.io/)
+- [The original paper](http://ramcloud.stanford.edu/raft.pdf)
+- [The thesis](https://ramcloud.stanford.edu/~ongaro/thesis.pdf)
+- [rafted_value](https://github.com/skirino/rafted_value) : Elixir implementation of the Raft consensus algorithm
+- [My slides to introduce rafted_value and raft_fleet](https://skirino.github.io/slides/raft_fleet.html#/)
