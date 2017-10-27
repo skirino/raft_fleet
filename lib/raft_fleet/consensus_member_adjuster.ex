@@ -73,9 +73,9 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
         {node_with_status_pairs, node_with_error_reason_pairs} = Enum.split_with(node_with_status_or_reason_pairs, &match?({_, %{}}, &1))
         nodes_with_living_members = Enum.map(node_with_status_pairs, &elem(&1, 0))
         {undesired_leader, undesired_leader_status} = Enum.map(node_with_status_pairs, &elem(&1, 1)) |> find_leader_from_statuses()
-        nodes_missing                = desired_member_nodes -- nodes_with_living_members
-        nodes_without_living_members = for {n, reason} <- node_with_error_reason_pairs, reason == :noproc, into: MapSet.new(), do: n
-        dead_follower_pids           = Map.get(undesired_leader_status || %{}, :unresponsive_followers, []) |> Enum.filter(&(node(&1) in nodes_without_living_members))
+        nodes_missing               = desired_member_nodes -- nodes_with_living_members
+        nodes_without_living_member = for {n, reason} <- node_with_error_reason_pairs, reason == :noproc, into: MapSet.new(), do: n
+        dead_follower_pids          = Map.get(undesired_leader_status || %{}, :unresponsive_followers, []) |> Enum.filter(&(node(&1) in nodes_without_living_member))
         cond do
           undesired_leader == nil and majority_of_members_definitely_died?(group_name, node_with_status_pairs, node_with_error_reason_pairs) ->
             # Something really bad happened to this consensus group and it's impossible to rescue the group to healthy state;
