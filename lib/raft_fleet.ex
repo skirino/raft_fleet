@@ -241,4 +241,47 @@ defmodule RaftFleet do
       pid -> pid
     end
   end
+
+  @doc """
+  Inspects members of consensus groups and finds a group (if any) in which no leader exists.
+
+  If one found, returns the name of the consensus group and also statuses (as maps) of existing members.
+  If no consensus group is in trouble, returns `:ok`.
+
+  Target consensus groups are:
+  - `RaftFleet.Cluster`, which is a special consensus group that manages metadata for other consensus groups
+  - all registered consensus groups (i.e., the ones returned by `RaftFleet.consensus_groups/0`)
+
+  This function is primarily intended to be used within remote console.
+  """
+  defun find_consensus_group_with_no_established_leader() :: :ok | {group_name :: atom, [{node, map}]} do
+    case inspect_statuses_of_consensus_group(RaftFleet.Cluster) do
+      {:error, pairs} -> {RaftFleet.Cluster, pairs}
+      :ok             ->
+        RaftFleet.consensus_groups()
+        |> Enum.find_value(:ok, fn {group, _n_desired_members} ->
+          case inspect_statuses_of_consensus_group(group) do
+            :ok             -> nil
+            {:error, pairs} -> {group, pairs}
+          end
+        end)
+    end
+  end
+
+  defunp inspect_statuses_of_consensus_group(group :: atom) :: :ok | {:error, [{node, map}]} do
+    case Util.retrieve_member_statuses(group) do
+      []    -> {:error, []}
+      pairs ->
+        {most_supported_leader, count} =
+          Enum.reduce(pairs, %{}, fn({_, s}, m) ->
+            Map.update(m, s.leader, 1, &(&1 + 1))
+          end)
+          |> Enum.max_by(fn {_, c} -> c end)
+        if is_pid(most_supported_leader) and 2 * count > length(pairs) do
+          :ok # majority of members agree on that leader
+        else
+          {:error, pairs}
+        end
+    end
+  end
 end

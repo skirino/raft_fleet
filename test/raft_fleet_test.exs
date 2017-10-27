@@ -223,6 +223,35 @@ defmodule RaftFleetTest do
     end)
   end
 
+  test "find_consensus_group_with_no_established_leader/0" do
+    Enum.each([:"2", :"3"], &start_slave/1)
+    [node_self | other_nodes] = nodes = [Node.self() | Node.list()]
+    Enum.each(nodes, fn n -> activate_node(n, &zone(&1, 2)) end)
+
+    config = Map.put(@rv_config, :election_timeout, 1_000)
+    assert RaftFleet.add_consensus_group(:consensus1, 3, config) == :ok
+    wait_until_members_fully_migrate(:consensus1)
+    assert RaftFleet.find_consensus_group_with_no_established_leader() == :ok
+
+    stop_slave(:"2")
+    stop_slave(:"3")
+    assert Node.list() == []
+    :timer.sleep(2_000)
+
+    {RaftFleet.Cluster, [{^node_self, status0}]} = RaftFleet.find_consensus_group_with_no_established_leader()
+    Enum.filter(status0.members, &(node(&1) in other_nodes))
+    |> Enum.each(fn dead_pid -> RaftedValue.force_remove_member(status0.from, dead_pid) end)
+    :timer.sleep(2_000)
+
+    {:consensus1, [{^node_self, status1}]} = RaftFleet.find_consensus_group_with_no_established_leader()
+    Enum.filter(status1.members, &(node(&1) in other_nodes))
+    |> Enum.each(fn dead_pid -> RaftedValue.force_remove_member(status1.from, dead_pid) end)
+    :timer.sleep(3_000)
+
+    assert RaftFleet.find_consensus_group_with_no_established_leader() == :ok
+    deactivate_node(node_self)
+  end
+
   test "active_nodes/0, consensus_groups/0 and whereis_leader/1" do
     # before activate/1
     catch_error RaftFleet.active_nodes()

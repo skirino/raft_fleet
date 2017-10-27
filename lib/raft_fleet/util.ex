@@ -25,8 +25,15 @@ defmodule RaftFleet.Util do
   def try_status(server) do
     try do
       RaftedValue.status(server)
+      |> Map.delete(:config) # `:config` is not important and thus removed here
     catch
       :exit, _ -> nil
     end
+  end
+
+  def retrieve_member_statuses(group) do
+    [Node.self() | Node.list()]
+    |> Enum.map(fn n -> {n, try_status({group, n})} end)
+    |> Enum.reject(&match?({_, nil}, &1))
   end
 end
