@@ -223,32 +223,58 @@ defmodule RaftFleetTest do
     end)
   end
 
-  test "find_consensus_group_with_no_established_leader/0" do
-    Enum.each([:"2", :"3"], &start_slave/1)
-    [node_self | other_nodes] = nodes = [Node.self() | Node.list()]
-    Enum.each(nodes, fn n -> activate_node(n, &zone(&1, 2)) end)
+  test "find_consensus_group_with_no_established_leader/0 and remove_dead_pids_located_in_dead_node/1" do
+    # Use 5-member consensus groups to cover all branches
+    shortnames = [:"2", :"3", :"4", :"5"]
+    node_self = Node.self()
+    [node2, node3, node4, node5] = Enum.map(shortnames, &shortname_to_longname/1)
+    Enum.each(shortnames, &start_slave/1)
+    Enum.each([node_self | Node.list()], fn n -> activate_node(n, &zone(&1, 2)) end)
 
     config = Map.put(@rv_config, :election_timeout, 1_000)
-    assert RaftFleet.add_consensus_group(:consensus1, 3, config) == :ok
-    wait_until_members_fully_migrate(:consensus1)
+    assert RaftFleet.add_consensus_group(:consensus1, 5, config) == :ok
+    wait_until_members_fully_migrate(:consensus1, 5)
     assert RaftFleet.find_consensus_group_with_no_established_leader() == :ok
 
-    stop_slave(:"2")
-    stop_slave(:"3")
-    assert Node.list() == []
+    Enum.each(tl(shortnames), &stop_slave/1)
+    assert Node.list() == [node2]
+
+    # `RaftFleet.Cluster` is in trouble as only 2/5 are alive
+    :timer.sleep(5_000)
+    {RaftFleet.Cluster, pairs0} = RaftFleet.find_consensus_group_with_no_established_leader()
+    assert Keyword.keys(pairs0)                                  == [node_self, node2]
+    assert length(RaftedValue.status(RaftFleet.Cluster).members) == 5
+    assert length(RaftedValue.status(:consensus1      ).members) == 5
+    catch_error RaftFleet.remove_dead_pids_located_in_dead_node(node5)
+
+    # `RaftFleet.Cluster` is still in trouble as only 2/4 are alive
     :timer.sleep(2_000)
+    {RaftFleet.Cluster, pairs1} = RaftFleet.find_consensus_group_with_no_established_leader()
+    assert Keyword.keys(pairs1)                                   == [node_self, node2]
+    assert length(RaftedValue.status(RaftFleet.Cluster).members)  == 4
+    assert length(RaftedValue.status(:consensus1      ).members)  == 5
+    assert RaftFleet.remove_dead_pids_located_in_dead_node(node4) == :ok # this cleans up dead pids in both `RaftFleet.Cluster` and `:consensus1`
 
-    {RaftFleet.Cluster, [{^node_self, status0}]} = RaftFleet.find_consensus_group_with_no_established_leader()
-    Enum.filter(status0.members, &(node(&1) in other_nodes))
-    |> Enum.each(fn dead_pid -> RaftedValue.force_remove_member(status0.from, dead_pid) end)
+    # members in `:consensus1` still remember `node5`
     :timer.sleep(2_000)
+    {:consensus1, pairs2} = RaftFleet.find_consensus_group_with_no_established_leader()
+    assert Keyword.keys(pairs2)                                   == [node_self, node2]
+    assert length(RaftedValue.status(RaftFleet.Cluster).members)  == 3
+    assert length(RaftedValue.status(:consensus1      ).members)  == 4
+    assert RaftFleet.remove_dead_pids_located_in_dead_node(node5) == :ok
 
-    {:consensus1, [{^node_self, status1}]} = RaftFleet.find_consensus_group_with_no_established_leader()
-    Enum.filter(status1.members, &(node(&1) in other_nodes))
-    |> Enum.each(fn dead_pid -> RaftedValue.force_remove_member(status1.from, dead_pid) end)
-    :timer.sleep(3_000)
-
+    # members in both `RaftFleet.Cluster` and `:consensus1` still remember `node3`
+    :timer.sleep(2_000)
     assert RaftFleet.find_consensus_group_with_no_established_leader() == :ok
+    assert length(RaftedValue.status(RaftFleet.Cluster).members)       == 3
+    assert length(RaftedValue.status(:consensus1      ).members)       == 3
+    assert RaftFleet.remove_dead_pids_located_in_dead_node(node3)      == :ok # this cleans up dead pids in both `RaftFleet.Cluster` and `:consensus1`
+
+    # now all is well, no dead pids are included
+    :timer.sleep(2_000)
+    assert RaftFleet.find_consensus_group_with_no_established_leader() == :ok
+    assert length(RaftedValue.status(RaftFleet.Cluster).members)       == 2
+    assert length(RaftedValue.status(:consensus1      ).members)       == 2
     deactivate_node(node_self)
   end
 

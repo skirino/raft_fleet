@@ -2,7 +2,7 @@ use Croma
 
 defmodule RaftFleet do
   @moduledoc """
-  Public interface functions of `RaftFleet`.
+  Public interface functions of `raft_fleet`.
   """
 
   use Application
@@ -60,7 +60,7 @@ defmodule RaftFleet do
   @doc """
   Queries the current nodes which have been activated using `activate/1` in the cluster.
 
-  This function sends a query to a leader of the "cluster consensus group", which is managed internally by raft_fleet.
+  This function sends a query to a leader of the `RaftFleet.Cluster` consensus group, which is managed internally by raft_fleet.
   The returned value is grouped by zone IDs which have been passed to `activate/1`.
   This function exits if no active node exists in the cluster.
   """
@@ -138,7 +138,7 @@ defmodule RaftFleet do
   @doc """
   Queries already registered consensus groups.
 
-  This function sends a query to a leader of the "cluster consensus group", which is managed internally by raft_fleet.
+  This function sends a query to a leader of the `RaftFleet.Cluster` consensus group, which is managed internally by raft_fleet.
   The returned value is a map whose keys and values are consensus group name and number of replicas of the group.
   This function exits if no active node exists in the cluster.
   """
@@ -253,22 +253,78 @@ defmodule RaftFleet do
   - all registered consensus groups (i.e., the ones returned by `RaftFleet.consensus_groups/0`)
 
   This function is primarily intended to be used within remote console.
+  Use this function to detect problematic consensus group in your cluster.
   """
   defun find_consensus_group_with_no_established_leader() :: :ok | {group_name :: atom, [{node, map}]} do
     case inspect_statuses_of_consensus_group(RaftFleet.Cluster) do
       {:error, pairs} -> {RaftFleet.Cluster, pairs}
-      :ok             ->
+      {:ok, _}        ->
         RaftFleet.consensus_groups()
         |> Enum.find_value(:ok, fn {group, _n_desired_members} ->
           case inspect_statuses_of_consensus_group(group) do
-            :ok             -> nil
+            {:ok, _}        -> nil
             {:error, pairs} -> {group, pairs}
           end
         end)
     end
   end
 
-  defunp inspect_statuses_of_consensus_group(group :: atom) :: :ok | {:error, [{node, map}]} do
+  @doc """
+  Removes member pids that reside in the specified dead node from all existing consensus groups.
+
+  Target consensus groups are:
+  - `RaftFleet.Cluster`, which is a special consensus group that manages metadata for other consensus groups
+  - all registered consensus groups (i.e., the ones returned by `RaftFleet.consensus_groups/0`)
+
+  If a target consensus group does not have an established leader, then this function
+  tries to remove dead pids (if any) by using `RaftedValue.force_remove_member/2`.
+
+  This function crashes if the `RaftFleet.Cluster` consensus group does not have a leader.
+  Each of the effects of this function is idempotent; you can freely call this function multiple times in case of failure.
+
+  This function is primarily intended to be used within remote console.
+  Use this function to resolve issues when e.g. some node suddenly died without cleaning up itself.
+  The caller must be sure that the `dead_node` has definitely died.
+  """
+  defun remove_dead_pids_located_in_dead_node(dead_node :: g[node]) :: :ok do
+    remove_pid_located_in_dead_node_from_consensus_group(RaftFleet.Cluster, dead_node)
+    {:ok, :ok} = RaftFleet.command(RaftFleet.Cluster, {:remove_node, dead_node})
+    RaftFleet.consensus_groups()
+    |> Enum.each(fn {group, _n_desired_members} ->
+      remove_pid_located_in_dead_node_from_consensus_group(group, dead_node)
+    end)
+  end
+
+  defunp remove_pid_located_in_dead_node_from_consensus_group(group :: atom, dead_node :: node) :: :ok do
+    require Logger
+    case inspect_statuses_of_consensus_group(group) do
+      {:ok, {leader, pairs}} ->
+        member_pids_belonging_to_dead_node(pairs, dead_node)
+        |> Enum.each(fn dead_pid ->
+          Logger.info("removing a member #{inspect(dead_pid)} which resides in #{dead_node}")
+          RaftedValue.remove_follower(leader, dead_pid)
+        end)
+      {:error, pairs} ->
+        # There's no leader in this case; we resort to `RaftedValue.force_remove_member/2`.
+        responding_member_pids = Enum.map(pairs, fn {_, s} -> s.from end)
+        member_pids_belonging_to_dead_node(pairs, dead_node)
+        |> Enum.each(fn dead_pid ->
+          Logger.info("forcibly removing a member #{inspect(dead_pid)} which resides in #{dead_node}")
+          Enum.each(responding_member_pids, fn member_pid ->
+            ret = RaftedValue.force_remove_member(member_pid, dead_pid)
+            Logger.info("forcibly removing a member #{inspect(dead_pid)} which resides in #{dead_node} #{inspect(ret)}")
+          end)
+        end)
+    end
+  end
+
+  defp member_pids_belonging_to_dead_node(pairs, dead_node) do
+    Enum.flat_map(pairs, fn {_, s} -> s.members end)
+    |> Enum.uniq()
+    |> Enum.filter(&(node(&1) == dead_node))
+  end
+
+  defunp inspect_statuses_of_consensus_group(group :: atom) :: {:ok, {pid, [{node, map}]}} | {:error, [{node, map}]} do
     case Util.retrieve_member_statuses(group) do
       []    -> {:error, []}
       pairs ->
@@ -278,7 +334,7 @@ defmodule RaftFleet do
           end)
           |> Enum.max_by(fn {_, c} -> c end)
         if is_pid(most_supported_leader) and 2 * count > length(pairs) do
-          :ok # majority of members agree on that leader
+          {:ok, {most_supported_leader, pairs}} # majority of members agree on that leader
         else
           {:error, pairs}
         end

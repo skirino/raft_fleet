@@ -38,8 +38,12 @@ defmodule SlaveNode do
   end
 
   def stop_slave(shortname) do
-    {:ok, hostname} = :inet.gethostname
-    :ok = :slave.stop(:"#{shortname}@#{hostname}")
+    :ok = :slave.stop(shortname_to_longname(shortname))
+  end
+
+  def shortname_to_longname(shortname) do
+    {:ok, hostname} = :inet.gethostname()
+    :"#{shortname}@#{hostname}"
   end
 
   def activate_node(node, zone_fun) do
