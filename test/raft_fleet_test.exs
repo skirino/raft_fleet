@@ -7,7 +7,7 @@ defmodule RaftFleetTest do
 
   @n_consensus_groups 60
   @rv_config_options  [
-    election_timeout: 2000, # In travis disk I/O is sometimes rather slow, resulting in more frequent leader elections
+    election_timeout: 2500, # In travis disk I/O is sometimes rather slow, resulting in more frequent leader elections
   ]
   @rv_config RaftedValue.make_config(RaftFleet.JustAnInt, @rv_config_options)
 
@@ -85,7 +85,7 @@ defmodule RaftFleetTest do
 
     # follower processes should automatically be spawned afterwards
     Enum.each(consensus_names, &wait_until_members_fully_migrate/1)
-    :timer.sleep(5_000)
+    :timer.sleep(10_000)
     assert_members_well_distributed(@n_consensus_groups)
 
     f.()
