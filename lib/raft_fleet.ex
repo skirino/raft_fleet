@@ -25,6 +25,7 @@ defmodule RaftFleet do
     Supervisor.start_link(children, opts)
   end
 
+  @impl true
   def stop(_state) do
     :ets.delete(:raft_fleet_leader_pid_cache)
   end
