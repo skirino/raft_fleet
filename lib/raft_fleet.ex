@@ -12,6 +12,7 @@ defmodule RaftFleet do
   alias RaftedValue.Data
   alias RaftFleet.{Cluster, Manager, LeaderPidCache, LeaderPidCacheRefresher, ProcessAndDiskLogIndexInspector, ZoneId, Util}
 
+  @impl true
   def start(_type, _args) do
     LeaderPidCache.init()
     children = [
