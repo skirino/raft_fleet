@@ -35,7 +35,7 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
   defp call_adjust_one_step(group_name \\ @group_name) do
     desired_member_nodes = Enum.map([1, 2, 3], &i2node/1)
     ConsensusMemberAdjuster.adjust_one_step([Node.self() | Node.list()], group_name, desired_member_nodes)
-    :timer.sleep(1500)
+    :timer.sleep(2000)
   end
 
   defp kill_all_consensus_members() do
@@ -127,7 +127,7 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
           pid = Process.whereis(group_name) |> at(n)
           Process.exit(pid, :kill)
         end)
-        :timer.sleep(2_000) # wait until the remaining leader (if any) steps down
+        :timer.sleep(2_500) # wait until the remaining leader (if any) steps down
 
         call_adjust_one_step(group_name)
         assert raft_log_includes_removal_of_group?.(group_name)
