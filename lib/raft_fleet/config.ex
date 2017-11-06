@@ -13,7 +13,7 @@ defmodule RaftFleet.Config do
       - Time interval between periodic triggers of workers whose job is to re-balance Raft member processes across the cluster.
       - The actual value used is obtained by
         `Application.get_env(:raft_fleet, :balancing_interval, #{@default_balancing_interval})`,
-        i.e. it defaults to #{div(@default_balancing_interval, 60_000)} minutes.
+        i.e. it defaults to #{div(@default_balancing_interval, 60_000)} minute.
   - `:leader_pid_cache_refresh_interval`
       - Interval time in milliseconds of leader pids cached in each nodes' local ETS tables.
       - The actual value used is obtained by
@@ -24,7 +24,8 @@ defmodule RaftFleet.Config do
         To judge whether a node is healthy or not, it uses number of unresponsive Raft members.
       - The actual value used is obtained by
         `Application.get_env(:raft_fleet, :node_purge_threshold_failing_members, #{@default_node_purge_threshold_failing_members})`,
-        i.e. nodes that have more than or equal to #{@default_node_purge_failure_time_window + 1} failing Raft members are regarded as "unhealthy".
+        i.e. by default nodes that have more than or equal to #{@default_node_purge_threshold_failing_members + 1}
+        failing Raft members are regarded as "unhealthy".
   - `:node_purge_failure_time_window`
       - When a node remains "unhealthy" for longer than this time window, it is removed from the participating nodes
         (that is, all activated nodes that host consensus members).
