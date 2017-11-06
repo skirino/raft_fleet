@@ -3,6 +3,8 @@ use Croma
 defmodule RaftFleet do
   @moduledoc """
   Public interface functions of `raft_fleet`.
+
+  See also `RaftFleet.Config` for available application configs.
   """
 
   use Application
