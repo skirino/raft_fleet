@@ -85,7 +85,7 @@ iex(3@skirino-Manjaro)> RaftFleet.query(:consensus1, :get)
 {:ok, 1}
 ```
 
-Adding/removing nodes triggers rebalancing of consensus member processes.
+Activating/deactivating a node in the cluster triggers rebalancing of consensus member processes.
 
 ## Links
 
