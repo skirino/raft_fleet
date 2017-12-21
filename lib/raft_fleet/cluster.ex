@@ -2,6 +2,7 @@ use Croma
 alias Croma.TypeGen, as: TG
 
 defmodule RaftFleet.Cluster do
+  alias RaftedValue.Data, as: RVData
   alias RaftFleet.{NodesPerZone, ConsensusGroups, CappedQueue, MembersPerLeaderNode, UnhealthyMembersCountsMap, Config}
 
   defmodule Server do
@@ -188,7 +189,7 @@ defmodule RaftFleet.Cluster do
     end
   end
 
-  @behaviour RaftedValue.Data
+  @behaviour RVData
   @typep t :: State.t
 
   defun new() :: t do
@@ -196,7 +197,7 @@ defmodule RaftFleet.Cluster do
     %State{nodes_per_zone: %{}, consensus_groups: %{}, recently_removed_consensus_names: q, members_per_leader_node: %{}, unhealthy_members_map: %{}}
   end
 
-  defun command(data :: t, arg :: Data.command_arg) :: {Data.command_ret, t} do
+  defun command(data :: t, arg :: RVData.command_arg) :: {RVData.command_ret, t} do
     (data, {:add_group, group, n, _rv_config, _node}    ) -> State.add_group(data, group, n)
     (data, {:remove_group, group}                       ) -> State.remove_group(data, group)
     (data, {:add_node, node, zone}                      ) -> {:ok, State.add_node(data, node, zone)}
@@ -205,7 +206,7 @@ defmodule RaftFleet.Cluster do
     (data, _                                            ) -> {{:error, :invalid_command}, data} # For safety
   end
 
-  defun query(data :: t, arg :: Data.query_arg) :: Data.query_ret do
+  defun query(data :: t, arg :: RVData.query_arg) :: RVData.query_ret do
     (%State{nodes_per_zone: nodes, members_per_leader_node: members, recently_removed_consensus_names: removed}, {:consensus_groups, node}) ->
       participating_nodes = Enum.flat_map(nodes, fn {_z, ns} -> ns end)
       groups_led_by_the_node = Map.get(members, node, [])
