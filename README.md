@@ -13,7 +13,7 @@ Elixir library to run multiple [Raft](https://raft.github.io/) consensus groups 
 
 - Easy hosting of multiple "cluster-wide state"s
 - Reasonably scalable placement of processes for multiple Raft consensus groups
-    - consensus member processes are distributed to ErlangVMs in a data center-aware manner using [randezvous hashing](https://en.wikipedia.org/wiki/Rendezvous_hashing)
+    - consensus member processes are distributed to ErlangVMs in a data center-aware manner using [rendezvous hashing](https://en.wikipedia.org/wiki/Rendezvous_hashing)
     - automatic rebalancing on adding/removing nodes
 - Each consensus group leader is accessible using the name of the consensus group (which must be an atom)
     - Actual pids of consensus leader processes are cached in a local ETS table for fast access

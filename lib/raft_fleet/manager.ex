@@ -97,7 +97,7 @@ defmodule RaftFleet.Manager do
   end
   def handle_cast({:start_consensus_group_members, name, rv_config, member_nodes}, state) do
     if State.phase(state) in [:active, :activating] do
-      # Spawn leader in this node (neglecting desired leader node defined by randezvous hashing) to avoid potential failures
+      # Spawn leader in this node (neglecting desired leader node defined by rendezvous hashing) to avoid potential failures
       case ProcessAndDiskLogIndexInspector.find_node_having_latest_log_index(name) do
         {:ok, node_or_nil} ->
           node_to_host_initial_leader = node_or_nil || Node.self()
