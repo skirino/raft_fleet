@@ -79,6 +79,7 @@ defmodule RaftFleet do
 
   `name` is used as a registered name for member processes of the new consensus group.
   `n_replica` is the number of replicas (Raft member processes implemented as `RaftedValue.Server`).
+  If you want all active nodes to host member processes, specify sufficiently large integer as `n_replica`.
   For explanation of `rv_config` see `RaftedValue.make_config/2`.
 
   If you configure `raft_fleet` to persist Raft logs & snapshots (see `:persistence_dir_parent` in `RaftFleet.Config`)
