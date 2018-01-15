@@ -1,9 +1,10 @@
 use Croma
 
 defmodule RaftFleet.Config do
-  @default_balancing_interval                   (if Mix.env == :test, do: 1_000, else: 60_000)
+  @default_balancing_interval                   (if Mix.env() == :test, do: 1_000, else: 60_000)
+  @default_node_purge_failure_time_window       (if Mix.env() == :test, do: 5_000, else: 600_000)
+  @default_node_purge_reconnect_interval        (if Mix.env() == :test, do: 2_000, else: 60_000)
   @default_node_purge_threshold_failing_members 2
-  @default_node_purge_failure_time_window       (if Mix.env == :test, do: 5_000, else: 600_000)
   @default_leader_pid_cache_refresh_interval    300_000
 
   @moduledoc """
@@ -19,19 +20,30 @@ defmodule RaftFleet.Config do
       - The actual value used is obtained by
         `Application.get_env(:raft_fleet, :leader_pid_cache_refresh_interval, #{@default_leader_pid_cache_refresh_interval})`,
         i.e. it defaults to #{div(@default_leader_pid_cache_refresh_interval, 60_000)} minutes.
+  - `:node_purge_failure_time_window`
+      - RaftFleet automatically purges nodes that remain "unhealthy" for this time window.
+        To judge whether a node is "unhealthy" or not, RaftFleet uses the following 2 criteria:
+          - A node that has been disconnected without declaring itself as `inactive` (by calling `RaftFleet.deactivate/0`)
+            is considered as "unhealthy" (see also `:node_purge_reconnect_interval` below).
+          - A node containing many unresponsive Raft member processes is considered as "unhealthy"
+            (see `:node_purge_threshold_failing_members` below).
+      - When a node remains "unhealthy" for longer than this time window, it is removed from the participating nodes
+        (that is, all activated nodes that host consensus members).
+        After removal, consensus member processes are automatically re-balanced within remaining active nodes.
+      - The actual value used is obtained by
+        `Application.get_env(:raft_fleet, :node_purge_failure_time_window, #{@default_node_purge_failure_time_window})`,
+        i.e. it defaults to #{div(@default_node_purge_failure_time_window, 60_000)} minutes.
+  - `:node_purge_reconnect_interval`
+      - Time interval (in milliseconds) of periodic reconnect attempts to disconnected nodes.
+      - The actual value used is obtained by
+        `Application.get_env(:raft_fleet, :node_purge_reconnect_interval, #{@default_node_purge_reconnect_interval})`,
+        i.e. it defaults to #{div(@default_node_purge_reconnect_interval, 60_000)} minute.
   - `:node_purge_threshold_failing_members`
-      - RaftFleet automatically purges unhealthy nodes.
-        To judge whether a node is healthy or not, it uses number of unresponsive Raft members.
+      - Threshold number of unresponsive processes to judge whether a node is "unhealthy" or not.
       - The actual value used is obtained by
         `Application.get_env(:raft_fleet, :node_purge_threshold_failing_members, #{@default_node_purge_threshold_failing_members})`,
         i.e. by default nodes that have more than or equal to #{@default_node_purge_threshold_failing_members + 1}
         failing Raft members are regarded as "unhealthy".
-  - `:node_purge_failure_time_window`
-      - When a node remains "unhealthy" for longer than this time window, it is removed from the participating nodes
-        (that is, all activated nodes that host consensus members).
-      - The actual value used is obtained by
-        `Application.get_env(:raft_fleet, :node_purge_failure_time_window, #{@default_node_purge_failure_time_window})`,
-        i.e. it defaults to #{div(@default_node_purge_failure_time_window, 60_000)} minutes.
   - `:persistence_dir_parent`
       - Parent directory of directories to store Raft logs & snapshots.
         If given, each consensus member process persists its logs and periodic snapshots in
@@ -51,12 +63,16 @@ defmodule RaftFleet.Config do
     Application.get_env(:raft_fleet, :leader_pid_cache_refresh_interval, @default_leader_pid_cache_refresh_interval)
   end
 
-  defun node_purge_threshold_failing_members() :: pos_integer do
-    Application.get_env(:raft_fleet, :node_purge_threshold_failing_members, @default_node_purge_threshold_failing_members)
-  end
-
   defun node_purge_failure_time_window() :: pos_integer do
     Application.get_env(:raft_fleet, :node_purge_failure_time_window, @default_node_purge_failure_time_window)
+  end
+
+  defun node_purge_reconnect_interval() :: pos_integer do
+    Application.get_env(:raft_fleet, :node_purge_reconnect_interval, @default_node_purge_reconnect_interval)
+  end
+
+  defun node_purge_threshold_failing_members() :: pos_integer do
+    Application.get_env(:raft_fleet, :node_purge_threshold_failing_members, @default_node_purge_threshold_failing_members)
   end
 
   defun persistence_dir_parent() :: nil | Path.t do

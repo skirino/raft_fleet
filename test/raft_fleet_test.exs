@@ -174,19 +174,23 @@ defmodule RaftFleetTest do
   end)
 
   defp run_node_failure_test(node_names, node_to_fail, zone_fun) do
+    node_to_fail_longname = shortname_to_longname(node_to_fail)
     Enum.each(node_names, &start_slave/1)
-    nodes = [Node.self() | Node.list()]
-    Enum.each(nodes, &activate_node(&1, zone_fun))
+    Enum.each([Node.self() | Node.list()], &activate_node(&1, zone_fun))
 
     with_consensus_groups_and_their_clients(fn ->
       stop_slave(node_to_fail)
-      :timer.sleep(30_000) # members in `node_to_fail` are recognized as unhealthy, `node_purge_failure_time_window` elapses, then rebalances
-      assert_members_well_distributed(@n_consensus_groups)
+      :timer.sleep(8_000) # `node_to_fail` is recognized as unhealthy, `node_purge_failure_time_window` elapses, then purge
 
-      refute node_to_fail in Node.list()
+      refute node_to_fail_longname in Node.list()
+      active_nodes = RaftFleet.active_nodes() |> Enum.flat_map(fn {_z, ns} -> ns end)
+      refute node_to_fail_longname in active_nodes
       status = RaftedValue.status(RaftFleet.Cluster)
-      assert length(status.members) == length(Node.list()) + 1
-      assert Enum.all?(status.members, fn pid -> node(pid) != node_to_fail end)
+      assert length(status.members) == length([Node.self() | Node.list()])
+      assert Enum.all?(status.members, fn pid -> node(pid) != node_to_fail_longname end)
+
+      :timer.sleep(20_000)
+      assert_members_well_distributed(@n_consensus_groups)
     end)
 
     Enum.each([Node.self() | Node.list()], &deactivate_node/1)
@@ -228,7 +232,11 @@ defmodule RaftFleetTest do
     node_self = Node.self()
     [node2, node3, node4, node5] = Enum.map(shortnames, &shortname_to_longname/1)
     Enum.each(shortnames, &start_slave/1)
-    Enum.each([node_self | Node.list()], fn n -> activate_node(n, &zone(&1, 2)) end)
+    Enum.each([node_self | Node.list()], fn n ->
+      activate_node(n, &zone(&1, 2))
+      # Set longer interval to suppress automatic cleanup by NodeReconnector
+      Application.put_env(:raft_fleet, :node_purge_reconnect_interval, 600_000) |> at(n)
+    end)
 
     config = Map.put(@rv_config, :election_timeout, 1_000)
     assert RaftFleet.add_consensus_group(:consensus1, 5, config) == :ok

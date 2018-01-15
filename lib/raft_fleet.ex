@@ -10,7 +10,7 @@ defmodule RaftFleet do
   use Application
   alias Supervisor.Spec
   alias RaftedValue.Data
-  alias RaftFleet.{Cluster, Manager, LeaderPidCache, LeaderPidCacheRefresher, ProcessAndDiskLogIndexInspector, ZoneId, Util}
+  alias RaftFleet.{Cluster, Manager, NodeReconnector, LeaderPidCache, LeaderPidCacheRefresher, ProcessAndDiskLogIndexInspector, ZoneId, Util}
 
   @impl true
   def start(_type, _args) do
@@ -18,6 +18,7 @@ defmodule RaftFleet do
     children = [
       Spec.supervisor(RaftFleet.ConsensusMemberSup, []),
       Spec.worker(Manager, []),
+      Spec.worker(NodeReconnector, []),
       Spec.worker(LeaderPidCacheRefresher, []),
       Spec.worker(ProcessAndDiskLogIndexInspector, []),
     ]
@@ -286,7 +287,6 @@ defmodule RaftFleet do
   This function crashes if the `RaftFleet.Cluster` consensus group does not have a leader.
   Each of the effects of this function is idempotent; you can freely call this function multiple times in case of failure.
 
-  This function is primarily intended to be used within remote console.
   Use this function to resolve issues when e.g. some node suddenly died without cleaning up itself.
   The caller must be sure that the `dead_node` has definitely died.
   """
