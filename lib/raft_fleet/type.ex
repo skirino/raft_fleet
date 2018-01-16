@@ -39,20 +39,6 @@ defmodule RaftFleet.UnhealthyMembersCountsMap do
     Map.delete(umcm, n)
     |> Map.new(fn {node, counts} -> {node, Map.delete(counts, n)} end)
   end
-
-  defun most_unhealthy_node(m :: t, threshold :: non_neg_integer) :: nil | node do
-    Map.values(m)
-    |> Enum.reduce(%{}, fn(map, acc) ->
-      Map.merge(map, acc, fn(_k, v1, v2) -> v1 + v2 end)
-    end)
-    |> Enum.filter(fn {_node, count} -> threshold < count end)
-    |> Enum.sort_by(fn {node, count} -> {count, node} end, &>=/2) # use order of `node` to break ties
-    |> List.first()
-    |> case do
-      {node, _count} -> node
-      nil            -> nil
-    end
-  end
 end
 
 if Mix.env() == :test do

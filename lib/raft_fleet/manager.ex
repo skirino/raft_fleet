@@ -4,7 +4,7 @@ alias Croma.TypeGen, as: TG
 defmodule RaftFleet.Manager do
   use GenServer
   require Logger
-  alias RaftFleet.{Cluster, ConsensusMemberSup, ConsensusMemberAdjuster, Activator, Deactivator, Config, ProcessAndDiskLogIndexInspector}
+  alias RaftFleet.{ConsensusMemberSup, ConsensusMemberAdjuster, Activator, Deactivator, Config, ProcessAndDiskLogIndexInspector}
 
   defmodule State do
     @type consensus_group_progress :: :leader_started | {:leader_delegated_to, node} | :process_exists | GenServer.from
@@ -14,7 +14,6 @@ defmodule RaftFleet.Manager do
       adjust_worker:                TG.nilable(Croma.Pid),
       activate_worker:              TG.nilable(Croma.Pid),
       deactivate_worker:            TG.nilable(Croma.Pid),
-      purge_wait_timer:             TG.nilable(Croma.Reference),
       being_added_consensus_groups: Croma.Map, # %{atom => consensus_group_progress}
     ]
 
@@ -81,20 +80,6 @@ defmodule RaftFleet.Manager do
     end
   end
 
-  def handle_cast({:node_purge_candidate_changed, node_to_purge}, %State{purge_wait_timer: ref1} = state) do
-    if State.phase(state) == :active do
-      if ref1, do: Process.cancel_timer(ref1)
-      ref2 =
-        if node_to_purge do
-          Process.send_after(self(), {:purge_node, node_to_purge}, Config.node_purge_failure_time_window())
-        else
-          nil
-        end
-      {:noreply, %State{state | purge_wait_timer: ref2}}
-    else
-      {:noreply, state}
-    end
-  end
   def handle_cast({:start_consensus_group_members, name, rv_config, member_nodes}, state) do
     if State.phase(state) in [:active, :activating] do
       # Spawn leader in this node (neglecting desired leader node defined by rendezvous hashing) to avoid potential failures
@@ -209,22 +194,6 @@ defmodule RaftFleet.Manager do
     log_abnormal_exit_reason(info, :adjust)
     {:noreply, %State{state | adjust_worker: nil}}
   end
-  def handle_info({:purge_node, node}, state) do
-    if State.phase(state) in [:active, :activating] do
-      %{state_name: state_name, members: members} = RaftedValue.status(Cluster)
-      if state_name == :leader do
-        Logger.info("purge node #{node} as too many members in the node are unresponsive")
-        RaftedValue.command(Cluster, {:remove_node, node})
-        case Enum.find(members, fn pid -> node(pid) == node end) do
-          nil        -> :ok
-          target_pid -> RaftedValue.remove_follower(Cluster, target_pid)
-        end
-      end
-      {:noreply, %State{state | purge_wait_timer: nil}}
-    else
-      {:noreply, state}
-    end
-  end
   def handle_info(_msg, state) do
     {:noreply, state}
   end
@@ -246,10 +215,6 @@ defmodule RaftFleet.Manager do
   defp log_abnormal_exit_reason(:normal, _), do: :ok
   defp log_abnormal_exit_reason(reason, worker_type) do
     Logger.error("#{worker_type} worker died unexpectedly: #{inspect(reason)}")
-  end
-
-  defun node_purge_candidate_changed(node_to_purge :: node) :: :ok do
-    GenServer.cast(__MODULE__, {:node_purge_candidate_changed, node_to_purge})
   end
 
   defun start_consensus_group_members(server       :: GenServer.server \\ __MODULE__,

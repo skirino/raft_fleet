@@ -65,8 +65,8 @@ defmodule RaftFleet.Cluster do
       consensus_groups:                 ConsensusGroups,
       recently_removed_consensus_names: CappedQueue,
       members_per_leader_node:          MembersPerLeaderNode,      # this is cache; reproducible from `nodes` and `consensus_groups`
-      unhealthy_members_map:            UnhealthyMembersCountsMap, # reported from all active nodes; used to calculate `node_to_purge`
-      node_to_purge:                    TG.nilable(Croma.Atom),    # node that has too many unhealthy raft members
+      unhealthy_members_map:            UnhealthyMembersCountsMap, # reported from all active nodes; may be used for troubleshooting
+      node_to_purge:                    TG.nilable(Croma.Atom),    # no longer used; just kept for backward compatibility
     ]
 
     def add_group(%__MODULE__{nodes_per_zone:                   nodes,
@@ -123,7 +123,7 @@ defmodule RaftFleet.Cluster do
       %__MODULE__{state | nodes_per_zone: new_nodes, members_per_leader_node: compute_members(new_nodes, groups)}
     end
 
-    def remove_node(%__MODULE__{nodes_per_zone: nodes, consensus_groups: groups, unhealthy_members_map: umm, node_to_purge: node_to_purge} = state, n) do
+    def remove_node(%__MODULE__{nodes_per_zone: nodes, consensus_groups: groups, unhealthy_members_map: umm} = state, n) do
       new_nodes =
         Enum.reduce(nodes, %{}, fn({z, ns}, m) ->
           case ns do
@@ -131,10 +131,9 @@ defmodule RaftFleet.Cluster do
             _    -> Map.put(m, z, List.delete(ns, n))
           end
         end)
-      new_members       = compute_members(new_nodes, groups)
-      new_umm           = UnhealthyMembersCountsMap.remove_node(umm, n)
-      new_node_to_purge = if node_to_purge == n, do: nil, else: node_to_purge
-      %__MODULE__{state | nodes_per_zone: new_nodes, members_per_leader_node: new_members, unhealthy_members_map: new_umm, node_to_purge: new_node_to_purge}
+      new_members = compute_members(new_nodes, groups)
+      new_umm     = UnhealthyMembersCountsMap.remove_node(umm, n)
+      %__MODULE__{state | nodes_per_zone: new_nodes, members_per_leader_node: new_members, unhealthy_members_map: new_umm}
     end
 
     defp compute_members(nodes, groups) do
@@ -146,11 +145,10 @@ defmodule RaftFleet.Cluster do
       end
     end
 
-    def update_unhealthy_members(%__MODULE__{nodes_per_zone: nodes, unhealthy_members_map: umm} = state, from_node, counts, threshold) do
+    def update_unhealthy_members(%__MODULE__{nodes_per_zone: nodes, unhealthy_members_map: umm} = state, from_node, counts, _threshold) do
       participating_nodes = Enum.flat_map(nodes, fn {_z, ns} -> ns end)
-      new_umm       = Map.put(umm, from_node, Map.take(counts, participating_nodes))
-      node_to_purge = UnhealthyMembersCountsMap.most_unhealthy_node(new_umm, threshold)
-      %__MODULE__{state | unhealthy_members_map: new_umm, node_to_purge: node_to_purge}
+      new_umm             = Map.put(umm, from_node, Map.take(counts, participating_nodes))
+      %__MODULE__{state | unhealthy_members_map: new_umm}
     end
   end
 
@@ -159,7 +157,7 @@ defmodule RaftFleet.Cluster do
 
     @behaviour RaftedValue.LeaderHook
 
-    def on_command_committed(state_before, entry, ret, state_after) do
+    def on_command_committed(_state_before, entry, ret, _state_after) do
       case entry do
         {:add_group, group_name, _, rv_config, leader_node} ->
           # Start leader only when this hook is run on the same node to which :add_group command was submitted
@@ -170,23 +168,14 @@ defmodule RaftFleet.Cluster do
               {:ok, nodes} -> Manager.start_consensus_group_members(group_name, rv_config, nodes)
             end
           end
-        {:remove_node, _}                    -> notify_if_node_to_purge_changed(state_before, state_after)
-        {:report_unhealthy_members, _, _, _} -> notify_if_node_to_purge_changed(state_before, state_after)
         _ -> nil
       end
     end
     def on_query_answered(_, _, _), do: nil
     def on_follower_added(_, _)   , do: nil
     def on_follower_removed(_, _) , do: nil
-    def on_elected(state)         , do: Manager.node_purge_candidate_changed(state.node_to_purge)
+    def on_elected(_)             , do: nil
     def on_restored_from_files(_) , do: nil
-
-    defp notify_if_node_to_purge_changed(state_before, state_after) do
-      node_to_purge = state_after.node_to_purge
-      if node_to_purge != state_before.node_to_purge do
-        Manager.node_purge_candidate_changed(node_to_purge)
-      end
-    end
   end
 
   @behaviour RVData

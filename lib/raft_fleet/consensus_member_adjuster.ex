@@ -2,7 +2,7 @@ use Croma
 
 defmodule RaftFleet.ConsensusMemberAdjuster do
   require Logger
-  alias RaftFleet.{Cluster, Manager, LeaderPidCache, Config}
+  alias RaftFleet.{Cluster, Manager, LeaderPidCache}
 
   def adjust() do
     case RaftFleet.query(Cluster, {:consensus_groups, Node.self()}) do
@@ -35,8 +35,7 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
     unhealthy_members_counts =
       Enum.flat_map(groups, fn group -> do_adjust(participating_nodes, group) end)
       |> Enum.reduce(%{}, fn(node, map) -> Map.update(map, node, 1, &(&1 + 1)) end)
-    threshold = Config.node_purge_threshold_failing_members()
-    RaftFleet.command(Cluster, {:report_unhealthy_members, Node.self(), unhealthy_members_counts, threshold})
+    RaftFleet.command(Cluster, {:report_unhealthy_members, Node.self(), unhealthy_members_counts, 10}) # `threshold (10)` here is no longer used
   end
 
   defp do_adjust(_, {_, []}), do: []
