@@ -1,6 +1,6 @@
 defmodule RaftFleetTest do
   use TestCaseTemplate
-  @moduletag timeout: 200_000
+  @moduletag timeout: 300_000
 
   import SlaveNode
   alias RaftFleet.ConsensusMemberSup
@@ -123,7 +123,7 @@ defmodule RaftFleetTest do
     with_slaves(node_names, fn ->
       with_active_nodes([Node.self() | Node.list()], zone_fun, fn ->
         with_consensus_groups_and_their_clients(fn ->
-          :ok
+          :timer.sleep(1_000)
         end)
       end)
     end)
@@ -155,7 +155,7 @@ defmodule RaftFleetTest do
       # deactivate/remove nodes one by one; clients should be able to interact with consensus leaders
       Enum.each(nodes1, fn n ->
         deactivate_node(n)
-        :timer.sleep(8_000)
+        :timer.sleep(10_000)
         assert_members_well_distributed(@n_consensus_groups)
       end)
     end)
@@ -180,7 +180,7 @@ defmodule RaftFleetTest do
 
     with_consensus_groups_and_their_clients(fn ->
       stop_slave(node_to_fail)
-      :timer.sleep(8_000) # `node_to_fail` is recognized as unhealthy, `node_purge_failure_time_window` elapses, then purge
+      :timer.sleep(10_000) # `node_to_fail` is recognized as unhealthy, `node_purge_failure_time_window` elapses, then purge
 
       refute node_to_fail_longname in Node.list()
       active_nodes = RaftFleet.active_nodes() |> Enum.flat_map(fn {_z, ns} -> ns end)
@@ -216,7 +216,7 @@ defmodule RaftFleetTest do
         :timer.sleep(1_000)
         target_pid = Process.whereis(RaftFleet.Cluster) |> at(Enum.random(all_nodes))
         Process.exit(target_pid, :kill)
-        :timer.sleep(8_000)
+        :timer.sleep(10_000)
 
         statuses = Enum.map(all_nodes, &RaftedValue.status({RaftFleet.Cluster, &1}))
         status_of_leader = Enum.find(statuses, &match?(%{state_name: :leader}, &1))
@@ -234,7 +234,7 @@ defmodule RaftFleetTest do
     start_slave(:"2")
     [n] = Node.list()
     RaftFleet.activate("z")
-    :timer.sleep(100)
+    :timer.sleep(500)
     RaftFleet.activate("z") |> at(n)
     :timer.sleep(500)
     assert RaftFleet.active_nodes() |> Enum.flat_map(fn {_z, ns} -> ns end) |> Enum.member?(n)
@@ -243,7 +243,7 @@ defmodule RaftFleetTest do
     assert state.other_active_nodes == [n]
 
     stop_slave(:"2")
-    :timer.sleep(20_000)
+    :timer.sleep(25_000)
     assert RaftFleet.active_nodes() |> Enum.flat_map(fn {_z, ns} -> ns end) == [Node.self()]
     deactivate_node(Node.self())
     state = :sys.get_state(RaftFleet.NodeReconnector)

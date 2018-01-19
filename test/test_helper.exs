@@ -143,6 +143,7 @@ defmodule TestCaseTemplate do
     on_exit(fn ->
       Application.delete_env(:raft_fleet, :persistence_dir_parent)
       File.rm_rf!("tmp")
+      :timer.sleep(1000) # try to avoid slave start failures in travis
     end)
   end
 end
