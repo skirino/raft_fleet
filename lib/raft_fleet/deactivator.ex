@@ -10,6 +10,7 @@ defmodule RaftFleet.Deactivator do
     :remove_node_command,
     :remove_follower_from_cluster_consensus,
     :delete_child_from_supervisor,
+    :notify_node_reconnector_in_this_node,
   ]
 
   def deactivate() do
@@ -62,6 +63,9 @@ defmodule RaftFleet.Deactivator do
   defp step(:delete_child_from_supervisor) do
     :ok = Supervisor.terminate_child(RaftFleet.Supervisor, Cluster.Server)
     :ok = Supervisor.delete_child(RaftFleet.Supervisor, Cluster.Server)
+  end
+  defp step(:notify_node_reconnector_in_this_node) do
+    GenServer.cast(RaftFleet.NodeReconnector, :this_node_deactivated)
   end
 
   defp pick_next_leader(current_leader, other_members) do

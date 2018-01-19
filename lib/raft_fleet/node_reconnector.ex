@@ -14,6 +14,19 @@ defmodule RaftFleet.NodeReconnector do
       unhealthy_since:    Croma.Map, # %{node => Monotonic.t}
     ]
 
+    defun this_node_activated(state :: t) :: t do
+      %__MODULE__{state | this_node_active?: true}
+    end
+
+    defun this_node_deactivated(state :: t) :: t do
+      %__MODULE__{state | this_node_active?: false}
+    end
+
+    defun other_node_activated(%__MODULE__{other_active_nodes: nodes} = state :: t, node :: node) :: t do
+      new_nodes = if node in nodes, do: nodes, else: [node | nodes]
+      %__MODULE__{state | other_active_nodes: new_nodes}
+    end
+
     defun refresh(state :: t) :: t do
       new_state = update_active_nodes(state) |> try_reconnect()
       purge_failing_nodes(new_state)
@@ -22,10 +35,10 @@ defmodule RaftFleet.NodeReconnector do
 
     defunp update_active_nodes(state :: t) :: t do
       try do
-        nodes = RaftFleet.active_nodes() |> Enum.flat_map(fn {_zone, nodes} -> nodes end)
+        all_nodes = RaftFleet.active_nodes() |> Enum.flat_map(fn {_z, ns} -> ns end)
         %__MODULE__{state |
-          this_node_active?:  Node.self() in nodes,
-          other_active_nodes: List.delete(nodes, Node.self()),
+          this_node_active?:  Node.self() in all_nodes,
+          other_active_nodes: List.delete(all_nodes, Node.self()),
         }
       catch
         _, _ -> state
@@ -68,12 +81,22 @@ defmodule RaftFleet.NodeReconnector do
   end
 
   defun start_link() :: GenServer.on_start do
-    GenServer.start_link(__MODULE__, :ok)
+    GenServer.start_link(__MODULE__, :ok, [name: __MODULE__])
   end
 
   def init(:ok) do
     start_timer()
     {:ok, %State{this_node_active?: false, other_active_nodes: [], unhealthy_since: %{}}}
+  end
+
+  def handle_cast(:this_node_activated, state) do
+    {:noreply, State.this_node_activated(state)}
+  end
+  def handle_cast(:this_node_deactivated, state) do
+    {:noreply, State.this_node_deactivated(state)}
+  end
+  def handle_cast({:other_node_activated, node}, state) do
+    {:noreply, State.other_node_activated(state, node)}
   end
 
   def handle_info(:timeout, state) do

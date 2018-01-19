@@ -226,6 +226,30 @@ defmodule RaftFleetTest do
     end)
   end
 
+  test "should purge nodes that failed right after it's activated" do
+    state = :sys.get_state(RaftFleet.NodeReconnector)
+    refute state.this_node_active?
+    assert state.other_active_nodes == []
+
+    start_slave(:"2")
+    [n] = Node.list()
+    RaftFleet.activate("z")
+    :timer.sleep(100)
+    RaftFleet.activate("z") |> at(n)
+    :timer.sleep(500)
+    assert RaftFleet.active_nodes() |> Enum.flat_map(fn {_z, ns} -> ns end) |> Enum.member?(n)
+    state = :sys.get_state(RaftFleet.NodeReconnector)
+    assert state.this_node_active?
+    assert state.other_active_nodes == [n]
+
+    stop_slave(:"2")
+    :timer.sleep(20_000)
+    assert RaftFleet.active_nodes() |> Enum.flat_map(fn {_z, ns} -> ns end) == [Node.self()]
+    deactivate_node(Node.self())
+    state = :sys.get_state(RaftFleet.NodeReconnector)
+    refute state.this_node_active?
+  end
+
   test "find_consensus_group_with_no_established_leader/0 and remove_dead_pids_located_in_dead_node/1" do
     # Use 5-member consensus groups to cover all branches
     shortnames = [:"2", :"3", :"4", :"5"]

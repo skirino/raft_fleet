@@ -7,7 +7,13 @@ defmodule RaftFleet.Activator do
   @sleep 1_000
 
   def activate(zone) do
-    run_steps([:start_cluster_consensus_member, {:add_node, zone}], @tries)
+    steps = [
+      :start_cluster_consensus_member,
+      {:add_node, zone},
+      :notify_node_reconnector_in_this_node,
+      :notify_node_reconnectors_in_other_nodes,
+    ]
+    run_steps(steps, @tries)
   end
 
   defp run_steps(_, 0), do: raise "Failed to complete all steps of node activation!"
@@ -32,5 +38,12 @@ defmodule RaftFleet.Activator do
       {:ok, _}    -> :ok
       {:error, _} -> :error
     end
+  end
+  defp step(:notify_node_reconnector_in_this_node) do
+    GenServer.cast(RaftFleet.NodeReconnector, :this_node_activated)
+  end
+  defp step(:notify_node_reconnectors_in_other_nodes) do
+    GenServer.abcast(Node.list(), RaftFleet.NodeReconnector, {:other_node_activated, Node.self()})
+    :ok
   end
 end
