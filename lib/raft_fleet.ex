@@ -306,18 +306,18 @@ defmodule RaftFleet do
       {:ok, {leader, pairs}} ->
         member_pids_belonging_to_dead_node(pairs, dead_node)
         |> Enum.each(fn dead_pid ->
-          Logger.info("removing a member #{inspect(dead_pid)} which resides in #{dead_node}")
-          RaftedValue.remove_follower(leader, dead_pid)
+          ret = RaftedValue.remove_follower(leader, dead_pid)
+          Logger.info("removed a member #{inspect(dead_pid)} (which resides in #{dead_node}) of group #{group}: #{inspect(ret)}")
         end)
       {:error, pairs} ->
         # There's no leader in this case; we resort to `RaftedValue.force_remove_member/2`.
         responding_member_pids = Enum.map(pairs, fn {_, s} -> s.from end)
         member_pids_belonging_to_dead_node(pairs, dead_node)
         |> Enum.each(fn dead_pid ->
-          Logger.info("forcibly removing a member #{inspect(dead_pid)} which resides in #{dead_node}")
+          Logger.info("forcibly removing a member #{inspect(dead_pid)} (which resides in #{dead_node}) of group #{group}")
           Enum.each(responding_member_pids, fn member_pid ->
             ret = RaftedValue.force_remove_member(member_pid, dead_pid)
-            Logger.info("forcibly removing a member #{inspect(dead_pid)} which resides in #{dead_node} #{inspect(ret)}")
+            Logger.info("made a member #{inspect(member_pid)} forget about #{inspect(dead_pid)}: #{inspect(ret)}")
           end)
         end)
     end
