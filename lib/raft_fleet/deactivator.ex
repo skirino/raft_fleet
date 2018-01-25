@@ -45,7 +45,7 @@ defmodule RaftFleet.Deactivator do
           []            -> :ok
           other_members ->
             case pick_next_leader(local_member, other_members) do
-              nil         -> nil # there are other members but they are in inactive nodes; nothing we can do except for waiting and retrying
+              nil         -> nil # there are other members but no suitable member found; nothing we can do except for waiting and retrying
               next_leader -> replace_leader(local_member, next_leader)
             end
             :error
@@ -70,11 +70,17 @@ defmodule RaftFleet.Deactivator do
 
   defp pick_next_leader(current_leader, other_members) do
     # We don't want to migrate the current leader to an inactive node; check currently active nodes before choosing a member.
-    {:ok, nodes_per_zone} = RaftedValue.query(current_leader, :active_nodes)
-    nodes = Map.values(nodes_per_zone) |> List.flatten() |> MapSet.new()
-    case Enum.filter(other_members, &(node(&1) in nodes)) do
-      []                      -> nil
-      members_in_active_nodes -> Enum.random(members_in_active_nodes)
+    case RaftedValue.query(current_leader, :active_nodes) do
+      {:ok, nodes_per_zone} ->
+        nodes = Map.values(nodes_per_zone) |> List.flatten() |> MapSet.new()
+        case Enum.filter(other_members, &(node(&1) in nodes)) do
+          []                      -> nil
+          members_in_active_nodes -> Enum.random(members_in_active_nodes)
+        end
+      {:error, _} ->
+        # Although local member has been the leader until very recently, it turns out that it's not leader now.
+        # Let's retry from the beginning of the step.
+        nil
     end
   end
 
