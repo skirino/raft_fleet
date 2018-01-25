@@ -53,7 +53,7 @@ defmodule RaftFleet.NodeReconnector do
             if Node.connect(n) do
               Map.delete(m, n)
             else
-              Map.put_new(m, n, Monotonic.millis())
+              Map.put_new_lazy(m, n, &Monotonic.millis/0)
             end
           end)
         %__MODULE__{state | unhealthy_since: map3}
@@ -70,7 +70,7 @@ defmodule RaftFleet.NodeReconnector do
           threshold_time = Monotonic.millis() - window
           failing_nodes = for {n, since} <- map, since < threshold_time, do: n
           spawn(fn ->
-            Enum.shuffle(failing_nodes) # randomize order of nodes to repair (to avoid repeatedly failing to add the same node)
+            Enum.shuffle(failing_nodes) # randomize order of nodes to repair (to avoid repeatedly failing to handle the same node)
             |> Enum.each(fn n ->
               Logger.info("purge node #{n} as it has been disconnected for longer than #{window}ms")
               RaftFleet.remove_dead_pids_located_in_dead_node(n)
