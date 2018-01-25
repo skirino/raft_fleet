@@ -18,6 +18,7 @@ Elixir library to run multiple [Raft](https://raft.github.io/) consensus groups 
 - Each consensus group leader is accessible using the name of the consensus group (which must be an atom)
     - Actual pids of consensus leader processes are cached in a local ETS table for fast access
 - Flexible data model (defined by [rafted_value](https://github.com/skirino/rafted_value))
+- Decentralized architecture and fault tolerance
 
 ## Example
 
@@ -87,10 +88,32 @@ iex(3@skirino-Manjaro)> RaftFleet.query(:consensus1, :get)
 
 Activating/deactivating a node in the cluster triggers rebalancing of consensus member processes.
 
+## Deployment notes
+
+To run `raft_fleet` within an ErlangVM cluster, the followings are our general recommendations.
+
+Cluster should consist of at least 3 nodes to tolerate 1 node failure.
+Similarly cluster nodes should span 3 (or more) data centers, so that the system keeps on functioning in the face of 1 data center failure.
+
+When you add new ErlangVM nodes, each node should run the following initialization steps:
+
+1. establish connections to other running nodes,
+2. call `RaftFleet.activate/1`.
+
+These steps are typically done within `start/2` of the main OTP application.
+Information of other running nodes should be available from e.g. IaaS API.
+
+When terminating a node you should proceed as follows
+(although `raft_fleet` tolerates failures that don't break quorums, it's much better to tell `raft_fleet` to make preparations):
+
+1. call `RaftFleet.deactivate/0` within the node-to-be-terminated,
+2. wait for a while (say, 10 min) so that existing consensus group members are successfully migrated to the remaining nodes, then
+3. finally shutdown.
+
 ## Links
 
 - [Raft official website](https://raft.github.io/)
 - [The original paper](http://ramcloud.stanford.edu/raft.pdf)
 - [The thesis](https://ramcloud.stanford.edu/~ongaro/thesis.pdf)
-- [rafted_value](https://github.com/skirino/rafted_value) : Elixir implementation of the Raft consensus algorithm
+- [`rafted_value`](https://github.com/skirino/rafted_value) : Elixir implementation of the Raft consensus algorithm
 - [My slides to introduce rafted_value and raft_fleet](https://skirino.github.io/slides/raft_fleet.html#/)
