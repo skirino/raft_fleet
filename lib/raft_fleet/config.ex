@@ -1,9 +1,9 @@
 use Croma
 
 defmodule RaftFleet.Config do
-  @default_balancing_interval                (if Mix.env() == :test, do: 1_000, else:  60_000)
-  @default_node_purge_failure_time_window    (if Mix.env() == :test, do: 5_000, else: 600_000)
-  @default_node_purge_reconnect_interval     (if Mix.env() == :test, do: 2_000, else:  60_000)
+  @default_balancing_interval                (if Mix.env() == :test, do:  1_000, else:  60_000)
+  @default_node_purge_failure_time_window    (if Mix.env() == :test, do: 30_000, else: 600_000)
+  @default_node_purge_reconnect_interval     (if Mix.env() == :test, do:  5_000, else:  60_000)
   @default_leader_pid_cache_refresh_interval 300_000
 
   @moduledoc """

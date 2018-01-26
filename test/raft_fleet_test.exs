@@ -180,7 +180,7 @@ defmodule RaftFleetTest do
 
     with_consensus_groups_and_their_clients(fn ->
       stop_slave(node_to_fail)
-      :timer.sleep(10_000) # `node_to_fail` is recognized as unhealthy, `node_purge_failure_time_window` elapses, then purge
+      :timer.sleep(50_000) # `node_to_fail` is recognized as unhealthy, `node_purge_failure_time_window` elapses, then purge
 
       refute node_to_fail_longname in Node.list()
       active_nodes = RaftFleet.active_nodes() |> Enum.flat_map(fn {_z, ns} -> ns end)
@@ -229,7 +229,8 @@ defmodule RaftFleetTest do
   test "should purge nodes that failed right after it's activated" do
     state = :sys.get_state(RaftFleet.NodeReconnector)
     refute state.this_node_active?
-    assert state.other_active_nodes == []
+    assert state.other_active_nodes      == []
+    assert RaftFleet.unreachable_nodes() == %{}
 
     start_slave(:"2")
     [n] = Node.list()
@@ -242,12 +243,20 @@ defmodule RaftFleetTest do
     assert state.this_node_active?
     assert state.other_active_nodes == [n]
 
+    time_before_failure = System.system_time(:seconds)
     stop_slave(:"2")
+    :timer.sleep(25_000)
+    unreachable_nodes = RaftFleet.unreachable_nodes()
+    assert Map.keys(unreachable_nodes) == [n]
+    assert unreachable_nodes[n] >= time_before_failure
+    assert unreachable_nodes[n] <= System.system_time(:seconds)
+
     :timer.sleep(25_000)
     assert RaftFleet.active_nodes() |> Enum.flat_map(fn {_z, ns} -> ns end) == [Node.self()]
     deactivate_node(Node.self())
     state = :sys.get_state(RaftFleet.NodeReconnector)
     refute state.this_node_active?
+    assert RaftFleet.unreachable_nodes() == %{}
   end
 
   test "find_consensus_group_with_no_established_leader/0 and remove_dead_pids_located_in_dead_node/1" do

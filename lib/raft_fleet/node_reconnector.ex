@@ -3,7 +3,7 @@ use Croma
 defmodule RaftFleet.NodeReconnector do
   use GenServer
   alias RaftedValue.Monotonic
-  alias RaftFleet.Config
+  alias RaftFleet.{Config, NodesPerZone}
 
   defmodule State do
     require Logger
@@ -27,22 +27,18 @@ defmodule RaftFleet.NodeReconnector do
       %__MODULE__{state | other_active_nodes: new_nodes}
     end
 
-    defun refresh(state :: t) :: t do
-      new_state = update_active_nodes(state) |> try_reconnect()
-      purge_failing_nodes(new_state)
-      new_state
+    defun update_active_nodes(state :: t, nodes_per_zone :: NodesPerZone.t) :: t do
+      all_nodes = Enum.flat_map(nodes_per_zone, fn {_z, ns} -> ns end)
+      %__MODULE__{state |
+        this_node_active?:  Node.self() in all_nodes,
+        other_active_nodes: List.delete(all_nodes, Node.self()),
+      }
     end
 
-    defunp update_active_nodes(state :: t) :: t do
-      try do
-        all_nodes = RaftFleet.active_nodes() |> Enum.flat_map(fn {_z, ns} -> ns end)
-        %__MODULE__{state |
-          this_node_active?:  Node.self() in all_nodes,
-          other_active_nodes: List.delete(all_nodes, Node.self()),
-        }
-      catch
-        _, _ -> state
-      end
+    defun refresh(state :: t) :: t do
+      new_state = try_reconnect(state)
+      purge_failing_nodes(new_state)
+      new_state
     end
 
     defunp try_reconnect(%__MODULE__{this_node_active?: active?, other_active_nodes: nodes, unhealthy_since: map1} = state :: t) :: t do
@@ -78,6 +74,11 @@ defmodule RaftFleet.NodeReconnector do
           end)
       end
     end
+
+    def unreachable_nodes(%__MODULE__{unhealthy_since: map}) do
+      offset = System.time_offset(:milliseconds)
+      Map.new(map, fn {n, monotonic} -> {n, div(offset + monotonic, 1000)} end)
+    end
   end
 
   defun start_link() :: GenServer.on_start do
@@ -87,6 +88,10 @@ defmodule RaftFleet.NodeReconnector do
   def init(:ok) do
     start_timer()
     {:ok, %State{this_node_active?: false, other_active_nodes: [], unhealthy_since: %{}}}
+  end
+
+  def handle_call(:unreachable_nodes, _from, state) do
+    {:reply, State.unreachable_nodes(state), state}
   end
 
   def handle_cast(:this_node_activated, state) do
@@ -101,7 +106,17 @@ defmodule RaftFleet.NodeReconnector do
 
   def handle_info(:timeout, state) do
     start_timer()
-    {:noreply, State.refresh(state)}
+    spawn_monitor(&call_active_nodes/0) # Use temporary process in order to keep NodeReconnector responsive
+    {:noreply, state}
+  end
+  def handle_info({:DOWN, _monitor_ref, :process, _pid, reason}, state) do
+    new_state =
+      case reason do
+        {:shutdown, npz} when is_map(npz) -> State.update_active_nodes(state, npz)
+        _error                            -> state
+      end
+      |> State.refresh()
+    {:noreply, new_state}
   end
   def handle_info(_msg, state) do
     {:noreply, state}
@@ -109,5 +124,15 @@ defmodule RaftFleet.NodeReconnector do
 
   defp start_timer() do
     Process.send_after(self(), :timeout, Config.node_purge_reconnect_interval())
+  end
+
+  defp call_active_nodes() do
+    result =
+      try do
+        RaftFleet.active_nodes()
+      catch
+        :error, _ -> :error
+      end
+    exit({:shutdown, result})
   end
 end

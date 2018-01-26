@@ -42,7 +42,7 @@ defmodule RaftFleet do
   to host consensus group members each node must be explicitly activated.
   `zone` is an ID of data center zone which this node belongs to.
   `zone` is used to determine which nodes to replicate data:
-  RaftFleet tries to place members of a consensus group across multiple zones for maximum availability.
+  `RaftFleet` tries to place members of each consensus group across multiple zones for maximum availability.
 
   Node activation by calling this function should be done after the node is fully connected to the other existing nodes;
   otherwise there is a possibility (although it is small) that the cluster forms partitioned subset of active nodes.
@@ -344,5 +344,24 @@ defmodule RaftFleet do
           {:error, pairs}
         end
     end
+  end
+
+  @doc """
+  Gets information about nodes that are active but unreachable from `Node.self()`.
+
+  `RaftFleet` periodically checks reachability to the other active nodes.
+  This function retrieves results of the checks as a map.
+  Each key of the returned map is a currently unreachable node (i.e. if there's no problem `%{}` is returned),
+  whereas each value is a timestamp (seconds since epoch) at which the node was recognized as unreachable.
+
+  Note that returned timestamps are not so accurate about when the node failed,
+  since they are obtained by healthchecks with an interval of `:node_purge_reconnect_interval`
+  (see also `RaftFleet.Config`).
+  Note also that, when a node remains unreachable for more than `:node_purge_failure_time_window`,
+  the node will be automatically purged from the active nodes.
+  After purging the failed node will not be included in return value of this function (as the node is no longer active).
+  """
+  defun unreachable_nodes() :: %{node => unreachable_since} when unreachable_since: pos_integer do
+    GenServer.call(RaftFleet.NodeReconnector, :unreachable_nodes)
   end
 end
