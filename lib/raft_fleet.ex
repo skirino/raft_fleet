@@ -10,7 +10,7 @@ defmodule RaftFleet do
   use Application
   alias Supervisor.Spec
   alias RaftedValue.Data
-  alias RaftFleet.{Cluster, Manager, NodeReconnector, LeaderPidCache, LeaderPidCacheRefresher, ProcessAndDiskLogIndexInspector, ZoneId, Util}
+  alias RaftFleet.{Cluster, Manager, NodeReconnector, LeaderPidCache, ZoneId, Util}
 
   @impl true
   def start(_type, _args) do
@@ -19,8 +19,8 @@ defmodule RaftFleet do
       Spec.supervisor(RaftFleet.ConsensusMemberSup, []),
       Spec.worker(Manager, []),
       Spec.worker(NodeReconnector, []),
-      Spec.worker(LeaderPidCacheRefresher, []),
-      Spec.worker(ProcessAndDiskLogIndexInspector, []),
+      Spec.worker(RaftFleet.LeaderPidCacheRefresher, []),
+      Spec.worker(RaftFleet.ProcessAndDiskLogIndexInspector, []),
     ]
     opts = [strategy: :one_for_one, name: RaftFleet.Supervisor]
     Supervisor.start_link(children, opts)
@@ -362,6 +362,6 @@ defmodule RaftFleet do
   After purging the failed node will not be included in return value of this function (as the node is no longer active).
   """
   defun unreachable_nodes() :: %{node => unreachable_since} when unreachable_since: pos_integer do
-    GenServer.call(RaftFleet.NodeReconnector, :unreachable_nodes)
+    GenServer.call(NodeReconnector, :unreachable_nodes)
   end
 end
