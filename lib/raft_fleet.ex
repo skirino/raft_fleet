@@ -167,32 +167,37 @@ defmodule RaftFleet do
   Note that for complete masking of leader elections `retry_interval * retry` must be sufficiently longer than
   the time scale for leader elections (`:election_timeout` in `RaftedValue.Config.t`).
 
+  `call_module` can be changed from the default (`:gen_statem` module) with an alternative module that exports
+  `call/3` for optimization of remote message passing.
+
   See also `RaftedValue.command/4`.
   """
   defun command(name           :: g[atom],
                 command_arg    :: Data.command_arg,
                 timeout        :: g[pos_integer]     \\ @default_timeout,
                 retry          :: g[non_neg_integer] \\ @default_retry,
-                retry_interval :: g[pos_integer]     \\ @default_retry_interval) :: {:ok, Data.command_ret} | {:error, :no_leader} do
+                retry_interval :: g[pos_integer]     \\ @default_retry_interval,
+                call_module    :: g[module]          \\ :gen_statem) :: {:ok, Data.command_ret} | {:error, :no_leader} do
     ref = make_ref()
     call_with_retry(name, retry + 1, retry_interval, fn pid ->
-      RaftedValue.command(pid, command_arg, timeout, ref)
+      RaftedValue.command(pid, command_arg, timeout, ref, call_module)
     end)
   end
 
   @doc """
   Executes a read-only query on the replicated value identified by `name`.
 
-  See `command/5` for explanations of `name`, `timeout`, `retry` and `retry_interval`.
+  See `command/5` for explanations of `name`, `timeout`, `retry`, `retry_interval` and `call_module`.
   See also `RaftedValue.query/3`.
   """
   defun query(name           :: g[atom],
               query_arg      :: Data.query_arg,
               timeout        :: g[pos_integer]     \\ @default_timeout,
               retry          :: g[non_neg_integer] \\ @default_retry,
-              retry_interval :: g[pos_integer]     \\ @default_retry_interval) :: {:ok, Data.query_ret} | {:error, :no_leader} do
+              retry_interval :: g[pos_integer]     \\ @default_retry_interval,
+              call_module    :: g[module]          \\ :gen_statem) :: {:ok, Data.query_ret} | {:error, :no_leader} do
     call_with_retry(name, retry + 1, retry_interval, fn pid ->
-      RaftedValue.query(pid, query_arg, timeout)
+      RaftedValue.query(pid, query_arg, timeout, call_module)
     end)
   end
 
