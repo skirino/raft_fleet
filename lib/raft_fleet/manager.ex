@@ -81,32 +81,33 @@ defmodule RaftFleet.Manager do
   end
 
   def handle_cast({:start_consensus_group_members, name, rv_config, member_nodes}, state) do
-    if State.phase(state) in [:active, :activating] do
-      # Spawn leader in this node (neglecting desired leader node defined by rendezvous hashing) to avoid potential failures
-      case ProcessAndDiskLogIndexInspector.find_node_having_latest_log_index(name) do
-        {:ok, node_or_nil} ->
-          node_to_host_initial_leader = node_or_nil || Node.self()
-          if node_to_host_initial_leader == Node.self() do
-            new_state = start_leader_and_tell_other_nodes_to_start_follower(name, rv_config, member_nodes, state)
-            {:noreply, new_state}
-          else
-            start_consensus_group_members({__MODULE__, node_to_host_initial_leader}, name, rv_config, member_nodes)
-            {:noreply, State.update_being_added_consensus_groups(state, name, {:leader_delegated_to, node_to_host_initial_leader})}
-          end
-        {:error, :process_exists} ->
-          {:noreply, State.update_being_added_consensus_groups(state, name, :process_exists)}
+    new_state =
+      if State.phase(state) in [:active, :activating] do
+        case ProcessAndDiskLogIndexInspector.find_node_having_latest_log_index(name) do
+          {:ok, node_or_nil} ->
+            # If there's no desired node, spawn leader in this node (neglecting the leader node defined by rendezvous hashing) to avoid potential failures
+            node_to_host_initial_leader = node_or_nil || Node.self()
+            if node_to_host_initial_leader == Node.self() do
+              start_leader_and_tell_other_nodes_to_start_follower(name, rv_config, member_nodes, state)
+            else
+              start_consensus_group_members({__MODULE__, node_to_host_initial_leader}, name, rv_config, member_nodes)
+              State.update_being_added_consensus_groups(state, name, {:leader_delegated_to, node_to_host_initial_leader})
+            end
+          {:error, :process_exists} ->
+            State.update_being_added_consensus_groups(state, name, :process_exists)
+        end
+      else
+        Logger.info("manager process is not active; cannot start member processes for consensus group #{name}")
+        state
       end
-    else
-      Logger.info("manager process is not active; cannot start member processes for consensus group #{name}")
-      {:noreply, state}
-    end
+    {:noreply, new_state}
   end
   def handle_cast({:start_consensus_group_follower, name, leader_node_hint}, state) do
     if State.phase(state) == :active do
       other_node_list =
         case leader_node_hint do
           nil  -> Node.list()
-          node -> [node | List.delete(Node.list(), node)] # reorder `Node.list()` so that the new follower can find leader immediately
+          node -> [node | List.delete(Node.list(), node)] # reorder nodes so that the new follower can find leader immediately (most of the time)
         end
       other_node_members = Enum.map(other_node_list, fn n -> {name, n} end)
       # To avoid blocking the Manager process, we spawn a temporary process solely for `Supervisor.start_child/2`.
