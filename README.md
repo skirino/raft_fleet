@@ -104,11 +104,12 @@ These steps are typically done within `start/2` of the main OTP application.
 Information of other running nodes should be available from e.g. IaaS API.
 
 When terminating a node you should proceed as follows
-(although `raft_fleet` tolerates failures that don't break quorums, it's much better to tell `raft_fleet` to make preparations):
+(although `raft_fleet` tolerates failures that don't break quorums,
+it's much better to tell `raft_fleet` to make preparations beforehand):
 
 1. call `RaftFleet.deactivate/0` within the node-to-be-terminated,
 2. wait for a while (say, 10 min) so that existing consensus group members are successfully migrated to the remaining nodes, then
-3. finally shutdown.
+3. finally shutdown the node.
 
 ## Links
 
