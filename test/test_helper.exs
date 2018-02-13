@@ -48,7 +48,7 @@ defmodule SlaveNode do
 
   def activate_node(node, zone_fun) do
     assert Supervisor.which_children(ConsensusMemberSup) |> at(node) == []
-    assert RaftFleet.deactivate                          |> at(node) == {:error, :inactive}
+    assert RaftFleet.deactivate()                        |> at(node) == {:error, :inactive}
     assert RaftFleet.activate(zone_fun.(node))           |> at(node) == :ok
     assert RaftFleet.activate(zone_fun.(node))           |> at(node) == {:error, :not_inactive}
     wait_for_activation(node, 10)
@@ -81,9 +81,9 @@ defmodule SlaveNode do
           :timer.sleep(5_000)
           RaftedValue.status({RaftFleet.Cluster, node})
       end
-    assert Process.alive?(pid)  |> at(node)
-    assert RaftFleet.deactivate |> at(node) == :ok
-    assert RaftFleet.deactivate |> at(node) == {:error, :inactive}
+    assert Process.alive?(pid)    |> at(node)
+    assert RaftFleet.deactivate() |> at(node) == :ok
+    assert RaftFleet.deactivate() |> at(node) == {:error, :inactive}
     ref = Process.monitor(pid)
     assert_receive({:DOWN, ^ref, :process, ^pid, _reason}, 15_000)
 
