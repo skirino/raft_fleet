@@ -6,10 +6,10 @@ defmodule RaftFleetTest do
   alias RaftFleet.ConsensusMemberSup
 
   @n_consensus_groups 60
-  @rv_config_options  [
+  @rv_config RaftedValue.make_config(RaftFleet.JustAnInt, [
+    heartbeat_timeout: 500,
     election_timeout: 2500, # In travis disk I/O is sometimes rather slow, resulting in more frequent leader elections
-  ]
-  @rv_config RaftedValue.make_config(RaftFleet.JustAnInt, @rv_config_options)
+  ])
 
   test "add_consensus_group/3 right after remove_consensus_group/1 should return {:error, :process_exists} and should not do anything" do
     with_active_nodes([Node.self()], &zone(&1, 1), fn ->
