@@ -170,7 +170,7 @@ defmodule RaftFleet do
   `call_module` can be changed from the default (`:gen_statem` module) with an alternative module that exports
   `call/3` for optimization of remote message passing.
 
-  See also `RaftedValue.command/4`.
+  See also `RaftedValue.command/5`.
   """
   defun command(name           :: g[atom],
                 command_arg    :: Data.command_arg,
@@ -187,8 +187,8 @@ defmodule RaftFleet do
   @doc """
   Executes a read-only query on the replicated value identified by `name`.
 
-  See `command/5` for explanations of `name`, `timeout`, `retry`, `retry_interval` and `call_module`.
-  See also `RaftedValue.query/3`.
+  See `command/6` for explanations of `name`, `timeout`, `retry`, `retry_interval` and `call_module`.
+  See also `RaftedValue.query/4`.
   """
   defun query(name           :: g[atom],
               query_arg      :: Data.query_arg,
