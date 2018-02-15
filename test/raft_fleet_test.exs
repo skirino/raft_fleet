@@ -383,12 +383,12 @@ defmodule RaftFleetTest do
   defp cause_error_in_newly_added_follower(f) do
     all_nodes = [Node.self() | Node.list()]
     Enum.each(all_nodes, fn n ->
-      value = Enum.random([:raise, :timeout])
-      Application.put_env(:raft_fleet, :rafted_value_test_inject_fault_after_add_follower, value) |> at(n)
+      mod = Enum.random([RaftFleet.PerMemberOptionsMaker.Raise, RaftFleet.PerMemberOptionsMaker.Timeout])
+      Application.put_env(:raft_fleet, :per_member_options_maker, mod) |> at(n)
     end)
     f.()
     Enum.each(all_nodes, fn n ->
-      Application.delete_env(:raft_fleet, :rafted_value_test_inject_fault_after_add_follower) |> at(n)
+      Application.delete_env(:raft_fleet, :per_member_options_maker) |> at(n)
     end)
   end
 

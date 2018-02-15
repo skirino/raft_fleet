@@ -13,7 +13,7 @@ defmodule RaftFleet.ProcessAndDiskLogIndexInspector do
   use GenServer
   alias Croma.Result, as: R
   alias RaftedValue.LogIndex
-  alias RaftFleet.Config
+  alias RaftFleet.PerMemberOptions
 
   defun start_link() :: {:ok, pid} do
     GenServer.start_link(__MODULE__, :ok, [name: __MODULE__])
@@ -30,11 +30,9 @@ defmodule RaftFleet.ProcessAndDiskLogIndexInspector do
   defunp make_reply(name :: atom) :: {:ok, nil | LogIndex.t} | {:error, :process_exists} do
     case Process.whereis(name) do
       nil ->
-        case Config.persistence_dir_parent() do
-          nil    -> {:ok, nil}
-          parent ->
-            dir = Path.join(parent, Atom.to_string(name))
-            {:ok, RaftedValue.read_last_log_index(dir)}
+        case PerMemberOptions.build(name) |> Keyword.get(:persistence_dir) do
+          nil -> {:ok, nil}
+          dir -> {:ok, RaftedValue.read_last_log_index(dir)}
         end
       _pid -> {:error, :process_exists}
     end

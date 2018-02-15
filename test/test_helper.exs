@@ -122,7 +122,7 @@ defmodule PersistenceSetting do
   end
 
   def turn_on_persistence(longname) do
-    Application.put_env(:raft_fleet, :persistence_dir_parent, Path.join("tmp", Atom.to_string(longname))) |> at(longname)
+    Application.put_env(:raft_fleet, :per_member_options_maker, RaftFleet.PerMemberOptionsMaker.Persist) |> at(longname)
   end
 end
 
@@ -141,7 +141,7 @@ defmodule TestCaseTemplate do
     File.rm_rf!("tmp")
     :ok = Application.start(:raft_fleet)
     on_exit(fn ->
-      Application.delete_env(:raft_fleet, :persistence_dir_parent)
+      Application.delete_env(:raft_fleet, :per_member_options_maker)
       File.rm_rf!("tmp")
       :timer.sleep(1000) # try to avoid slave start failures in travis
     end)

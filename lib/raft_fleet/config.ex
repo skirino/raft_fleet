@@ -35,7 +35,21 @@ defmodule RaftFleet.Config do
       - The actual value used is obtained by
         `Application.get_env(:raft_fleet, :node_purge_reconnect_interval, #{@default_node_purge_reconnect_interval})`,
         i.e. it defaults to #{div(@default_node_purge_reconnect_interval, 60_000)} minute.
+  - `:per_member_options_maker`
+      - A module that implements `RaftFleet.PerMemberOptionsMaker` behaviour.
+        The module is used when constructing a 2nd argument of `RaftedValue.start_link/2`,
+        i.e., when starting a new consensus member process.
+        This configuration provides a way to customize options (such as whether to persist Raft logs & snapshots)
+        for each consensus group member.
+      - Defaults to `nil`, which means that the default options of `RaftedValue.start_link/2` are used for all consensus groups.
+      - Note that `RaftFleet.Cluster` (a special consensus group to manage metadata for `:raft_fleet`)
+        also uses `:per_member_options_maker` module (if set).
+        Callback implementation must handle `RaftFleet.Cluster` appropriately, in addition to consensus group names
+        that are explicitly added by `RaftFleet.add_consensus_group/3`.
+      - Note also that you cannot specify `:name` by callback implementation as it's fixed by `:raft_fleet`.
   - `:persistence_dir_parent`
+      - Deprecated in favor of `:per_member_options_maker`.
+        If `:per_member_options_maker` has a non-nil value, `:persistence_dir_parent` is not used.
       - Parent directory of directories to store Raft logs & snapshots.
         If given, each consensus member process persists its logs and periodic snapshots in
         `Path.join(Application.get_env(:raft_fleet, :persistence_dir_parent), Atom.to_string(consensus_group_name))`.
@@ -62,12 +76,42 @@ defmodule RaftFleet.Config do
     Application.get_env(:raft_fleet, :node_purge_reconnect_interval, @default_node_purge_reconnect_interval)
   end
 
+  defun per_member_options_maker() :: nil | module do
+    Application.get_env(:raft_fleet, :per_member_options_maker)
+  end
+
   defun persistence_dir_parent() :: nil | Path.t do
     Application.get_env(:raft_fleet, :persistence_dir_parent)
   end
+end
 
-  @doc false
-  defun rafted_value_test_inject_fault_after_add_follower() :: nil | :raise | :timeout do
-    Application.get_env(:raft_fleet, :rafted_value_test_inject_fault_after_add_follower)
+if Mix.env() == :test do
+  defmodule RaftFleet.PerMemberOptionsMaker.Persist do
+    @behaviour RaftFleet.PerMemberOptionsMaker
+    defun make(name :: atom) :: [RaftedValue.option] do
+      [persistence_dir: Path.join(["tmp", Atom.to_string(Node.self()), Atom.to_string(name)])]
+    end
+  end
+
+  defmodule RaftFleet.PerMemberOptionsMaker.Raise do
+    @behaviour RaftFleet.PerMemberOptionsMaker
+    defun make(name :: atom) :: [RaftedValue.option] do
+      if name == RaftFleet.Cluster do
+        []
+      else
+        [test_inject_fault_after_add_follower: :raise]
+      end
+    end
+  end
+
+  defmodule RaftFleet.PerMemberOptionsMaker.Timeout do
+    @behaviour RaftFleet.PerMemberOptionsMaker
+    defun make(name :: atom) :: [RaftedValue.option] do
+      if name == RaftFleet.Cluster do
+        []
+      else
+        [test_inject_fault_after_add_follower: :timeout]
+      end
+    end
   end
 end
