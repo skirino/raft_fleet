@@ -9,14 +9,14 @@ defmodule RaftFleet.Cluster do
     defun start_link(rv_config :: RaftedValue.Config.t, name :: g[atom]) :: GenServer.on_start do
       # Use lock facility provided by :global module to avoid race conditions
       :global.trans({:raft_fleet_cluster_state_initialization, self()}, fn ->
-        if !Enum.any?(Node.list(), fn n -> rafted_value_server_alive?({name, n}) end) do
+        if not Enum.any?(Node.list(), fn n -> rafted_value_server_alive?({name, n}) end) do
           RaftedValue.start_link({:create_new_consensus_group, rv_config}, PerMemberOptions.build(name))
         end
       end, [Node.self() | Node.list()], 0)
       |> case do
         {:ok, pid} -> {:ok, pid}
         _          ->
-          # Other server exists or cannot acquire lock; we need retry as there may be no leader
+          # Other server exists or cannot acquire lock; we need to retry since there may be no leader
           start_follower_with_retry(name, 3)
       end
     end
@@ -111,7 +111,7 @@ defmodule RaftFleet.Cluster do
     end
 
     def add_node(%__MODULE__{nodes_per_zone: nodes, consensus_groups: groups} = state, n, z) do
-      new_nodes  = Map.update(nodes, z, [n], fn ns -> Enum.uniq([n | ns]) end)
+      new_nodes = Map.update(nodes, z, [n], fn ns -> Enum.uniq([n | ns]) end)
       %__MODULE__{state | nodes_per_zone: new_nodes, members_per_leader_node: compute_members(new_nodes, groups)}
     end
 

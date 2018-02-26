@@ -22,10 +22,10 @@ defmodule RaftFleet.Config do
   - `:node_purge_failure_time_window`
       - A node is considered "unhealthy" if it has been disconnected from the other nodes
         without declaring itself as `inactive` (by calling `RaftFleet.deactivate/0`).
-        RaftFleet tries to reconnect to unhealthy node in order to recover from short-term issues
+        RaftFleet tries to reconnect to unhealthy nodes in order to recover from short-term issues
         such as temporary network failures (see also `:node_purge_reconnect_interval` below).
         To handle longer-term issues, RaftFleet automatically removes nodes that remain "unhealthy"
-        for this time window (in milliseconds) from the participating active nodes.
+        for this time window (in milliseconds) from the list of participating active nodes.
         After removal, consensus member processes are automatically re-balanced within remaining active nodes.
       - The actual value used is obtained by
         `Application.get_env(:raft_fleet, :node_purge_failure_time_window, #{@default_node_purge_failure_time_window})`,

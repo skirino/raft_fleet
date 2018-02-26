@@ -4,7 +4,7 @@ defmodule RaftFleet.CappedQueue do
   @type t :: {non_neg_integer, non_neg_integer, :queue.queue}
 
   defun new(max_length :: g[non_neg_integer]) :: t do
-    {max_length, 0, :queue.new}
+    {max_length, 0, :queue.new()}
   end
 
   defun enqueue({max, len, q} :: t, v :: any) :: t do
