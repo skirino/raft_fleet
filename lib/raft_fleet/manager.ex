@@ -170,18 +170,20 @@ defmodule RaftFleet.Manager do
     end
   end
 
-  def handle_info(:adjust_members, %State{adjust_worker: worker} = state) do
-    new_state =
+  def handle_info(:adjust_members, %State{adjust_worker: worker} = state0) do
+    state1 =
       if worker do
-        state # don't invoke multiple workers
+        state0 # don't invoke multiple workers
       else
-        %State{state | adjust_worker: start_worker(ConsensusMemberAdjuster, :adjust, [])}
+        %State{state0 | adjust_worker: start_worker(ConsensusMemberAdjuster, :adjust, [])}
       end
-    if State.phase(state) == :active do
-      {:noreply, start_timer(new_state)}
-    else
-      {:noreply, new_state}
-    end
+    state2 =
+      if State.phase(state1) == :active do
+        start_timer(state1)
+      else
+        state1
+      end
+    {:noreply, state2}
   end
   def handle_info({:DOWN, _ref, :process, pid, info}, %State{activate_worker: pid} = state) do
     log_abnormal_exit_reason(info, :activate)
