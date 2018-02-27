@@ -47,14 +47,6 @@ defmodule RaftFleet.Config do
         Callback implementation must handle `RaftFleet.Cluster` appropriately, in addition to consensus group names
         that are explicitly added by `RaftFleet.add_consensus_group/3`.
       - Note also that you cannot specify `:name` by callback implementation as it's fixed by `:raft_fleet`.
-  - `:persistence_dir_parent`
-      - Deprecated in favor of `:per_member_options_maker`.
-        If `:per_member_options_maker` has a non-nil value, `:persistence_dir_parent` is not used.
-      - Parent directory of directories to store Raft logs & snapshots.
-        If given, each consensus member process persists its logs and periodic snapshots in
-        `Path.join(Application.get_env(:raft_fleet, :persistence_dir_parent), Atom.to_string(consensus_group_name))`.
-        See also options for `RaftedValue.start_link/2`.
-        If not given all processes will run in in-memory mode.
 
   Note that each raft_fleet process uses application configs stored in the local node.
   If you want to configure the options above you must set them on all nodes in your cluster.
@@ -78,10 +70,6 @@ defmodule RaftFleet.Config do
 
   defun per_member_options_maker() :: nil | module do
     Application.get_env(:raft_fleet, :per_member_options_maker)
-  end
-
-  defun persistence_dir_parent() :: nil | Path.t do
-    Application.get_env(:raft_fleet, :persistence_dir_parent)
   end
 end
 

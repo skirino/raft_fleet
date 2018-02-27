@@ -82,7 +82,7 @@ defmodule RaftFleet do
   If you want all active nodes to host member processes, specify sufficiently large integer as `n_replica`.
   For explanation of `rv_config` see `RaftedValue.make_config/2`.
 
-  If you configure `raft_fleet` to persist Raft logs & snapshots (see `:persistence_dir_parent` in `RaftFleet.Config`)
+  If you configure `raft_fleet` to persist Raft logs & snapshots (see also `RaftFleet.Config`)
   and the consensus group with `name` had been removed by `remove_consensus_group/1`,
   then `add_consensus_group/3` will restore the state of the consensus group from the snapshot and log files.
 
@@ -131,7 +131,7 @@ defmodule RaftFleet do
 
   Note that `remove_consensus_group/1` does not immediately terminate existing member processes;
   they will be terminated afterward by background worker process (see also `:balancing_interval` in `RaftFleet.Config`).
-  Note also that, if Raft logs and snapshots has been created (see `:persistence_dir_parent` in `RaftFleet.Config`),
+  Note also that, if Raft logs and snapshots has been created (see also `RaftFleet.Config`),
   `remove_consensus_group/1` does not remove these files.
   """
   defun remove_consensus_group(name :: g[atom]) :: :ok | {:error, :not_found | :no_leader} do
