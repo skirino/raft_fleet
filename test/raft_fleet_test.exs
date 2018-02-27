@@ -31,6 +31,26 @@ defmodule RaftFleetTest do
     end)
   end
 
+  test "repeatedly calling remove_consensus_group/1 should eventually remove processes for target consensus groups" do
+    with_active_nodes([Node.self()], &zone(&1, 1), fn ->
+      names = Enum.map(1 .. 300, fn i -> :"consensus#{i}" end)
+      Enum.each(names, fn name ->
+        :ok = RaftFleet.add_consensus_group(name, 3, @rv_config)
+      end)
+      Enum.each(names, fn name ->
+        assert is_pid(Process.whereis(name))
+      end)
+      Enum.each(names, fn name ->
+        :ok = RaftFleet.remove_consensus_group(name)
+      end)
+      # Wait for at least 1 interval of adjuster
+      :timer.sleep(5000)
+      Enum.each(names, fn name ->
+        assert is_nil(Process.whereis(name))
+      end)
+    end)
+  end
+
   defp start_consensus_group(name) do
     assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
     assert RaftFleet.add_consensus_group(name, 3, @rv_config) == {:error, :already_added}
