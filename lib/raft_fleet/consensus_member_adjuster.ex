@@ -4,12 +4,15 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
   require Logger
   alias RaftFleet.{Cluster, Manager, LeaderPidCache}
 
+  # Currently this is fixed; simply I don't know whether this should be customizable or not.
+  @wait_time_before_forgetting_deactivated_node 30 * 60_000
+
   def adjust() do
     case RaftFleet.query(Cluster, {:consensus_groups, Node.self()}) do
       {:error, reason} ->
         Logger.info("querying all consensus groups failed: #{inspect(reason)}")
-      {:ok, {participating_nodes, groups, removed_groups_queue}} ->
-        kill_members_of_removed_groups(removed_groups_queue)
+      {:ok, {participating_nodes, groups, removed_groups}} ->
+        kill_members_of_removed_groups(removed_groups)
         adjust_consensus_member_sets(participating_nodes, groups)
         leader_pid = LeaderPidCache.get(Cluster)
         if is_pid(leader_pid) and node(leader_pid) == Node.self() do
@@ -18,17 +21,35 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
     end
   end
 
-  defp kill_members_of_removed_groups({removed1, removed2}) do
+  defp kill_members_of_removed_groups({removed1, removed2}) when is_list(removed2) do
+    # interacting with `RaftFleet.Cluster` of version `< 0.7.0`; this clause will be removed in a future release.
     Enum.each(removed1, &stop_local_member/1)
     Enum.each(removed2, &stop_local_member/1)
-    # TODO: report to Cluster
+    notify_completion_of_cleanup(List.first(removed1)) # as no `index` is available here, we use the latest removed group name
+  end
+  defp kill_members_of_removed_groups({removed_groups, index}) do
+    # interacting with `RaftFleet.Cluster` of version `>= 0.7.0`
+    Enum.each(removed_groups, &stop_local_member/1)
+    notify_completion_of_cleanup(index)
   end
 
   defp stop_local_member(group_name) do
     case Process.whereis(group_name) do
       nil -> :ok
-      pid -> :gen_statem.stop(pid)
+      pid ->
+        try do
+          :gen_statem.stop(pid)
+        catch
+          :exit, _ -> :ok # Any other concurrent activity has just killed the pid; neglect it.
+        end
     end
+  end
+
+  defp notify_completion_of_cleanup(index_or_group_name_or_nil) do
+    spawn(fn ->
+      millis = System.system_time(:milliseconds)
+      RaftFleet.command(Cluster, {:stopped_extra_members, Node.self(), index_or_group_name_or_nil, millis, @wait_time_before_forgetting_deactivated_node})
+    end)
   end
 
   defp adjust_consensus_member_sets(participating_nodes, groups) do
