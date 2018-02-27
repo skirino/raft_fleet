@@ -58,12 +58,16 @@ defmodule RaftFleet.Cluster do
       recently_removed_consensus_names: TG.nilable(CappedQueue), # kept for backward compatibility; will be removed in favor of `recently_removed_groups`
       recently_removed_groups:          RecentlyRemovedGroups,
       members_per_leader_node:          MembersPerLeaderNode,    # this is cache; reproducible from `nodes` and `consensus_groups`
-      unhealthy_members_map:            TG.nilable(Croma.Map),   # no longer used; just kept for backward compatibility
-      node_to_purge:                    TG.nilable(Croma.Atom),  # no longer used; just kept for backward compatibility
     ]
 
     def migrate_from_older_version(state) do
-      state
+      if Map.has_key?(state, :unhealthy_members_map) do
+        state
+        |> Map.delete(:unhealthy_members_map)
+        |> Map.delete(:node_to_purge)
+      else
+        state
+      end
     end
 
     def add_group(state0, group, n_replica) do
