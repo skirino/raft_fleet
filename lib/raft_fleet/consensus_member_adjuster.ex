@@ -23,25 +23,38 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
 
   defp kill_members_of_removed_groups({removed1, removed2}) when is_list(removed2) do
     # interacting with `RaftFleet.Cluster` of version `< 0.7.0`; this clause will be removed in a future release.
-    Enum.each(removed1, &stop_local_member/1)
-    Enum.each(removed2, &stop_local_member/1)
+    Enum.each(removed1, &stop_members_of_removed_group/1)
+    Enum.each(removed2, &stop_members_of_removed_group/1)
     notify_completion_of_cleanup(List.first(removed1)) # as no `index` is available here, we use the latest removed group name
   end
   defp kill_members_of_removed_groups({removed_groups, index}) do
     # interacting with `RaftFleet.Cluster` of version `>= 0.7.0`
-    Enum.each(removed_groups, &stop_local_member/1)
+    Enum.each(removed_groups, &stop_members_of_removed_group/1)
     notify_completion_of_cleanup(index)
   end
 
-  defp stop_local_member(group_name) do
-    case Process.whereis(group_name) do
-      nil -> :ok
-      pid ->
-        try do
-          :gen_statem.stop(pid)
-        catch
-          :exit, _ -> :ok # Any other concurrent activity has just killed the pid; neglect it.
+  defp stop_members_of_removed_group(group_name) do
+    case try_status(group_name) do
+      %{from: from, members: members} ->
+        stop_member(from)
+        case List.delete(members, from) do
+          []            -> :ok
+          other_members -> spawn(fn -> Enum.each(other_members, &stop_member/1) end)
         end
+      _failed ->
+        # Even if `status/1` times out, we have to remove at least locally running member
+        case Process.whereis(group_name) do
+          nil -> :ok
+          pid -> stop_member(pid)
+        end
+    end
+  end
+
+  defp stop_member(pid) do
+    try do
+      :gen_statem.stop(pid)
+    catch
+      :exit, _ -> :ok # Any other concurrent activity has just killed the pid; neglect it.
     end
   end
 
