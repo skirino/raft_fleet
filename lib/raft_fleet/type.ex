@@ -28,19 +28,6 @@ defmodule RaftFleet.MembersPerLeaderNode do
   use Croma.SubtypeOfMap, key_module: Croma.Atom, value_module: TG.list_of(ConsensusNodesPair)
 end
 
-defmodule RaftFleet.UnhealthyMembersCounts do
-  use Croma.SubtypeOfMap, key_module: Croma.Atom, value_module: Croma.NonNegInteger
-end
-
-defmodule RaftFleet.UnhealthyMembersCountsMap do
-  use Croma.SubtypeOfMap, key_module: Croma.Atom, value_module: RaftFleet.UnhealthyMembersCounts
-
-  defun remove_node(umcm :: t, n :: node) :: t do
-    Map.delete(umcm, n)
-    |> Map.new(fn {node, counts} -> {node, Map.delete(counts, n)} end)
-  end
-end
-
 if Mix.env() == :test do
   # To run code within slave nodes during tests, all modules must be compiled into beam files (i.e. they can't load .exs files)
   defmodule RaftFleet.JustAnInt do

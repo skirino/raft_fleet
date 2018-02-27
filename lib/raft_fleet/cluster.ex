@@ -3,7 +3,7 @@ alias Croma.TypeGen, as: TG
 
 defmodule RaftFleet.Cluster do
   alias RaftedValue.Data, as: RVData
-  alias RaftFleet.{NodesPerZone, ConsensusGroups, CappedQueue, MembersPerLeaderNode, UnhealthyMembersCountsMap, PerMemberOptions}
+  alias RaftFleet.{NodesPerZone, ConsensusGroups, CappedQueue, MembersPerLeaderNode, PerMemberOptions}
 
   defmodule Server do
     defun start_link(rv_config :: RaftedValue.Config.t, name :: g[atom]) :: GenServer.on_start do
@@ -56,9 +56,9 @@ defmodule RaftFleet.Cluster do
       nodes_per_zone:                   NodesPerZone,
       consensus_groups:                 ConsensusGroups,
       recently_removed_consensus_names: CappedQueue,
-      members_per_leader_node:          MembersPerLeaderNode,      # this is cache; reproducible from `nodes` and `consensus_groups`
-      unhealthy_members_map:            UnhealthyMembersCountsMap, # reported from all active nodes; may be used for troubleshooting
-      node_to_purge:                    TG.nilable(Croma.Atom),    # no longer used; just kept for backward compatibility
+      members_per_leader_node:          MembersPerLeaderNode,   # this is cache; reproducible from `nodes` and `consensus_groups`
+      unhealthy_members_map:            TG.nilable(Croma.Map),  # no longer used; just kept for backward compatibility
+      node_to_purge:                    TG.nilable(Croma.Atom), # no longer used; just kept for backward compatibility
     ]
 
     def add_group(%__MODULE__{nodes_per_zone:                   nodes,
@@ -115,7 +115,7 @@ defmodule RaftFleet.Cluster do
       %__MODULE__{state | nodes_per_zone: new_nodes, members_per_leader_node: compute_members(new_nodes, groups)}
     end
 
-    def remove_node(%__MODULE__{nodes_per_zone: nodes, consensus_groups: groups, unhealthy_members_map: umm} = state, n) do
+    def remove_node(%__MODULE__{nodes_per_zone: nodes, consensus_groups: groups} = state, n) do
       new_nodes =
         Enum.reduce(nodes, %{}, fn({z, ns}, m) ->
           case ns do
@@ -124,8 +124,7 @@ defmodule RaftFleet.Cluster do
           end
         end)
       new_members = compute_members(new_nodes, groups)
-      new_umm     = UnhealthyMembersCountsMap.remove_node(umm, n)
-      %__MODULE__{state | nodes_per_zone: new_nodes, members_per_leader_node: new_members, unhealthy_members_map: new_umm}
+      %__MODULE__{state | nodes_per_zone: new_nodes, members_per_leader_node: new_members}
     end
 
     defp compute_members(nodes, groups) do
@@ -137,10 +136,8 @@ defmodule RaftFleet.Cluster do
       end
     end
 
-    def update_unhealthy_members(%__MODULE__{nodes_per_zone: nodes, unhealthy_members_map: umm} = state, from_node, counts, _threshold) do
-      participating_nodes = Enum.flat_map(nodes, fn {_z, ns} -> ns end)
-      new_umm             = Map.put(umm, from_node, Map.take(counts, participating_nodes))
-      %__MODULE__{state | unhealthy_members_map: new_umm}
+    def update_unhealthy_members(state, _from_node, _counts, _threshold) do
+      state
     end
   end
 
@@ -175,7 +172,7 @@ defmodule RaftFleet.Cluster do
 
   defun new() :: t do
     q = CappedQueue.new(100)
-    %State{nodes_per_zone: %{}, consensus_groups: %{}, recently_removed_consensus_names: q, members_per_leader_node: %{}, unhealthy_members_map: %{}}
+    %State{nodes_per_zone: %{}, consensus_groups: %{}, recently_removed_consensus_names: q, members_per_leader_node: %{}}
   end
 
   defun command(data :: t, arg :: RVData.command_arg) :: {RVData.command_ret, t} do
