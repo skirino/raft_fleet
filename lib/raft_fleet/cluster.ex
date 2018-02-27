@@ -152,11 +152,6 @@ defmodule RaftFleet.Cluster do
       new_rrgs = RecentlyRemovedGroups.update(rrgs, npz, node, index_or_group_name_or_nil, now, wait_time)
       %__MODULE__{state | recently_removed_groups: new_rrgs}
     end
-
-    # not used anymore; will be removed
-    def update_unhealthy_members(state0, _from_node, _counts, _threshold) do
-      migrate_from_older_version(state0)
-    end
   end
 
   defmodule Hook do
