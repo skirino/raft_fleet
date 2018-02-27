@@ -26,6 +26,7 @@ defmodule RaftFleet.RecentlyRemovedGroups do
     group_to_indices: GroupNameToIndices,
   ]
 
+  # `from_queue/2` is not used since v0.7.0; will be removed.
   defun from_queue(nodes :: NodesPerZone.t, {_, _, q} :: CappedQueue.t) :: t do
     now = System.system_time(:milliseconds) # Though it's impure we accept this since (1) this runs only when migrating from older data, and (2) the timestamp will soon be rewritten
     active_nodes = Enum.flat_map(nodes, fn {_z, ns} -> ns end) |> Map.new(fn n -> {n, {now, nil}} end)

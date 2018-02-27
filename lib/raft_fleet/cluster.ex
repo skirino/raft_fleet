@@ -55,28 +55,22 @@ defmodule RaftFleet.Cluster do
     use Croma.Struct, fields: [
       nodes_per_zone:                   NodesPerZone,
       consensus_groups:                 ConsensusGroups,
-      recently_removed_consensus_names: CappedQueue,            # kept for backward compatibility; will be removed in favor of `recently_removed_groups`
-      recently_removed_groups:          TG.nilable(RecentlyRemovedGroups),
-      members_per_leader_node:          MembersPerLeaderNode,   # this is cache; reproducible from `nodes` and `consensus_groups`
-      unhealthy_members_map:            TG.nilable(Croma.Map),  # no longer used; just kept for backward compatibility
-      node_to_purge:                    TG.nilable(Croma.Atom), # no longer used; just kept for backward compatibility
+      recently_removed_consensus_names: TG.nilable(CappedQueue), # kept for backward compatibility; will be removed in favor of `recently_removed_groups`
+      recently_removed_groups:          RecentlyRemovedGroups,
+      members_per_leader_node:          MembersPerLeaderNode,    # this is cache; reproducible from `nodes` and `consensus_groups`
+      unhealthy_members_map:            TG.nilable(Croma.Map),   # no longer used; just kept for backward compatibility
+      node_to_purge:                    TG.nilable(Croma.Atom),  # no longer used; just kept for backward compatibility
     ]
 
     def migrate_from_older_version(state) do
-      if Map.has_key?(state, :recently_removed_groups) do
-        state
-      else
-        %__MODULE__{nodes_per_zone: nodes, recently_removed_consensus_names: removed_names} = state
-        Map.put(state, :recently_removed_groups, RecentlyRemovedGroups.from_queue(nodes, removed_names))
-      end
+      state
     end
 
     def add_group(state0, group, n_replica) do
-      %__MODULE__{nodes_per_zone:                   nodes,
-                  consensus_groups:                 groups,
-                  recently_removed_consensus_names: removed,
-                  recently_removed_groups:          rrgs,
-                  members_per_leader_node:          members} = state = migrate_from_older_version(state0)
+      %__MODULE__{nodes_per_zone:          nodes,
+                  consensus_groups:        groups,
+                  recently_removed_groups: rrgs,
+                  members_per_leader_node: members} = state = migrate_from_older_version(state0)
       if Map.has_key?(groups, group) do
         {{:error, :already_added}, state}
       else
@@ -84,28 +78,25 @@ defmodule RaftFleet.Cluster do
           {{:error, :no_active_node}, state}
         else
           new_groups   = Map.put(groups, group, n_replica)
-          new_removed  = CappedQueue.filter(removed, &(&1 != group))
           new_rrgs     = RecentlyRemovedGroups.cancel(rrgs, group)
           [leader | _] = member_nodes = NodesPerZone.lrw_members(nodes, group, n_replica)
           pair         = {group, member_nodes}
           new_members  = Map.update(members, leader, [pair], &[pair | &1])
-          new_state    = %__MODULE__{state | consensus_groups: new_groups, recently_removed_consensus_names: new_removed, recently_removed_groups: new_rrgs, members_per_leader_node: new_members}
+          new_state    = %__MODULE__{state | consensus_groups: new_groups, recently_removed_groups: new_rrgs, members_per_leader_node: new_members}
           {{:ok, member_nodes}, new_state}
         end
       end
     end
 
     def remove_group(state0, group) do
-      %__MODULE__{nodes_per_zone:                   nodes,
-                  consensus_groups:                 groups,
-                  recently_removed_consensus_names: removed,
-                  recently_removed_groups:          rrgs,
-                  members_per_leader_node:          members} = state = migrate_from_older_version(state0)
+      %__MODULE__{nodes_per_zone:          nodes,
+                  consensus_groups:        groups,
+                  recently_removed_groups: rrgs,
+                  members_per_leader_node: members} = state = migrate_from_older_version(state0)
       if Map.has_key?(groups, group) do
-        new_groups  = Map.delete(groups, group)
-        new_removed = CappedQueue.enqueue(removed, group)
-        new_rrgs    = RecentlyRemovedGroups.add(rrgs, group)
-        new_state   = %__MODULE__{state | consensus_groups: new_groups, recently_removed_consensus_names: new_removed, recently_removed_groups: new_rrgs}
+        new_groups = Map.delete(groups, group)
+        new_rrgs   = RecentlyRemovedGroups.add(rrgs, group)
+        new_state  = %__MODULE__{state | consensus_groups: new_groups, recently_removed_groups: new_rrgs}
         if map_size(nodes) == 0 do
           {:ok, new_state}
         else
@@ -208,10 +199,11 @@ defmodule RaftFleet.Cluster do
   end
 
   defun query(data :: t, arg :: RVData.query_arg) :: RVData.query_ret do
-    (%State{nodes_per_zone: nodes, members_per_leader_node: members, recently_removed_consensus_names: removed}, {:consensus_groups, node}) ->
+    (%State{nodes_per_zone: nodes, members_per_leader_node: members, recently_removed_groups: removed}, {:consensus_groups, node}) ->
       participating_nodes = Enum.flat_map(nodes, fn {_z, ns} -> ns end)
       groups_led_by_the_node = Map.get(members, node, [])
-      {participating_nodes, groups_led_by_the_node, CappedQueue.underlying_queue(removed)}
+      removed_groups_with_index = RecentlyRemovedGroups.names_for_node(removed, node)
+      {participating_nodes, groups_led_by_the_node, removed_groups_with_index}
     (%State{nodes_per_zone: nodes}, :active_nodes)        -> nodes
     (%State{consensus_groups: groups}, :consensus_groups) -> groups
     (_, _)                                                -> {:error, :invalid_query} # For safety
