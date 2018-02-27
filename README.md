@@ -20,6 +20,11 @@ Elixir library to run multiple [Raft](https://raft.github.io/) consensus groups 
 - Flexible data model (defined by [rafted_value](https://github.com/skirino/rafted_value))
 - Decentralized architecture and fault tolerance
 
+## Notes on backward compatibility
+
+- Users of `<= 0.6.0` should upgrade to `0.6.1` before upgrading to `0.7.x` due to a change in internal data structure.
+  While `<= 0.6.0` and `0.7.x` are not compatible, `0.6.1` should be able to interact with both `<= 0.6.0` and `0.7.x`.
+
 ## Example
 
 Suppose we have a cluster of 4 erlang nodes:
