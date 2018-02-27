@@ -253,30 +253,59 @@ defmodule RaftFleetTest do
     assert RaftFleet.unreachable_nodes() == %{}
 
     start_slave(:"2")
-    [n] = Node.list()
-    RaftFleet.activate("z")
+    [n2] = Node.list()
+    start_slave(:"3")
+    [n3] = Node.list() -- [n2]
+    :ok = RaftFleet.activate("z")
     :timer.sleep(500)
-    RaftFleet.activate("z") |> at(n)
+    :ok = RaftFleet.activate("z") |> at(n2)
     :timer.sleep(500)
-    assert RaftFleet.active_nodes() |> Enum.flat_map(fn {_z, ns} -> ns end) |> Enum.member?(n)
+    :ok = RaftFleet.activate("z") |> at(n3)
+    :timer.sleep(2000)
+    active_nodes1 = RaftFleet.active_nodes() |> Enum.flat_map(fn {_z, ns} -> ns end)
+    assert Node.self() in active_nodes1
+    assert n2          in active_nodes1
+    assert n3          in active_nodes1
+    :timer.sleep(500)
     state = :sys.get_state(RaftFleet.NodeReconnector)
     assert state.this_node_active?
-    assert state.other_active_nodes == [n]
+    assert n2 in state.other_active_nodes
+    assert n3 in state.other_active_nodes
+    :timer.sleep(8_000) # at least 1 timeout in NodeReconnector before stopping :"2"
 
     time_before_failure = System.system_time(:seconds)
     stop_slave(:"2")
-    :timer.sleep(25_000)
-    unreachable_nodes = RaftFleet.unreachable_nodes()
-    assert Map.keys(unreachable_nodes) == [n]
-    assert unreachable_nodes[n] >= time_before_failure
-    assert unreachable_nodes[n] <= System.system_time(:seconds)
+    unreachable_since = wait_until_node_recognized_as_unreachable(n2)
+    assert unreachable_since >= time_before_failure
+    assert unreachable_since <= System.system_time(:seconds)
 
-    :timer.sleep(25_000)
-    assert RaftFleet.active_nodes() |> Enum.flat_map(fn {_z, ns} -> ns end) == [Node.self()]
+    :timer.sleep(32_000) # wait for `node_purge_failure_time_window`
+    active_nodes2 = RaftFleet.active_nodes() |> Enum.flat_map(fn {_z, ns} -> ns end)
+    assert Node.self() in active_nodes2
+    assert n3          in active_nodes2
+    refute n2          in active_nodes2
+    :timer.sleep(8_000) # at least 1 more timeout in NodeReconnector
+
+    deactivate_node(n3)
+    stop_slave(:"3")
     deactivate_node(Node.self())
     state = :sys.get_state(RaftFleet.NodeReconnector)
     refute state.this_node_active?
     assert RaftFleet.unreachable_nodes() == %{}
+  end
+
+  defp wait_until_node_recognized_as_unreachable(node, tries \\ 0) do
+    if tries > 10 do
+      raise "NodeReconnector couldn't detect failing node '#{node}'!"
+    else
+      :timer.sleep(3_000)
+      unreachable_nodes = RaftFleet.unreachable_nodes()
+      if Map.keys(unreachable_nodes) == [node] do
+        unreachable_nodes[node]
+      else
+        wait_until_node_recognized_as_unreachable(node, tries + 1)
+      end
+    end
   end
 
   test "find_consensus_group_with_no_established_leader/0 and remove_dead_pids_located_in_dead_node/1" do
