@@ -89,9 +89,9 @@ defmodule RaftFleet do
   The caller is blocked until the newly spawned leader becomes ready.
   `await_timeout` specifies how many milliseconds to wait for the initialization.
   """
-  defun add_consensus_group(name      :: g[atom],
-                            n_replica :: g[pos_integer],
-                            rv_config = %RaftedValue.Config{},
+  defun add_consensus_group(name          :: g[atom],
+                            n_replica     :: g[pos_integer],
+                            rv_config     =  %RaftedValue.Config{},
                             await_timeout :: g[pos_integer] \\ 5_000) :: :ok | {:error, :already_added | :no_leader | any} do
     ref = make_ref()
     call_with_retry(Cluster, @default_retry + 1, @default_retry_interval, fn pid ->
@@ -111,9 +111,9 @@ defmodule RaftFleet do
             {:ok, {:leader_delegated_to, delegated_node}} ->
               {:ok, :leader_started} = GenServer.call({Manager, delegated_node}, msg, await_timeout)
               :ok
-            {:error, :process_exists} ->
-              remove_consensus_group(name)
-              {:error, :process_exists}
+            {:error, :process_exists} = e ->
+              remove_consensus_group(name) # rollback the newly-added consensus group
+              e
           end
         catch
           :exit, reason -> {:error, reason}

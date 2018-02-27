@@ -9,19 +9,19 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
       {:error, reason} ->
         Logger.info("querying all consensus groups failed: #{inspect(reason)}")
       {:ok, {participating_nodes, groups, removed_groups_queue}} ->
-        leader_pid = LeaderPidCache.get(Cluster)
         kill_members_of_removed_groups(removed_groups_queue)
         adjust_consensus_member_sets(participating_nodes, groups)
+        leader_pid = LeaderPidCache.get(Cluster)
         if is_pid(leader_pid) and node(leader_pid) == Node.self() do
           adjust_cluster_consensus_members(leader_pid)
         end
     end
   end
 
-  defp kill_members_of_removed_groups(removed_groups_queue) do
-    {removed1, removed2} = removed_groups_queue
+  defp kill_members_of_removed_groups({removed1, removed2}) do
     Enum.each(removed1, &stop_local_member/1)
     Enum.each(removed2, &stop_local_member/1)
+    # TODO: report to Cluster
   end
 
   defp stop_local_member(group_name) do
@@ -32,10 +32,7 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
   end
 
   defp adjust_consensus_member_sets(participating_nodes, groups) do
-    unhealthy_members_counts =
-      Enum.flat_map(groups, fn group -> do_adjust(participating_nodes, group) end)
-      |> Enum.reduce(%{}, fn(node, map) -> Map.update(map, node, 1, &(&1 + 1)) end)
-    RaftFleet.command(Cluster, {:report_unhealthy_members, Node.self(), unhealthy_members_counts, 10}) # `threshold (10)` here is no longer used
+    Enum.each(groups, fn group -> do_adjust(participating_nodes, group) end)
   end
 
   defp do_adjust(_, {_, []}), do: []
@@ -59,7 +56,6 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
             remove_dead_follower(group_name, pid, unresponsive_pids)
           true -> :ok
         end
-        Enum.map(unresponsive_pids, &node/1)
       status_or_reason ->
         # We need to take both of the followings into account to correctly find member processes:
         # - currently connected nodes, which may already be deactivated but may still have member processes
@@ -92,7 +88,6 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
             Logger.info("migrating leader of #{group_name} in #{node(undesired_leader)} to the member in this node: #{inspect(ret)}")
           true -> :ok
         end
-        []
     end
   end
 

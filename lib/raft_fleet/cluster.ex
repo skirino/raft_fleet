@@ -136,6 +136,7 @@ defmodule RaftFleet.Cluster do
       end
     end
 
+    # not used anymore; will be removed
     def update_unhealthy_members(state, _from_node, _counts, _threshold) do
       state
     end
@@ -176,12 +177,11 @@ defmodule RaftFleet.Cluster do
   end
 
   defun command(data :: t, arg :: RVData.command_arg) :: {RVData.command_ret, t} do
-    (data, {:add_group, group, n, _rv_config, _node}    ) -> State.add_group(data, group, n)
-    (data, {:remove_group, group}                       ) -> State.remove_group(data, group)
-    (data, {:add_node, node, zone}                      ) -> {:ok, State.add_node(data, node, zone)}
-    (data, {:remove_node, node}                         ) -> {:ok, State.remove_node(data, node)}
-    (data, {:report_unhealthy_members, from, counts, th}) -> {:ok, State.update_unhealthy_members(data, from, counts, th)}
-    (data, _                                            ) -> {{:error, :invalid_command}, data} # For safety
+    (data, {:add_group, group, n, _rv_config, _node}) -> State.add_group(data, group, n) # `rv_config` and `node` will be used in `Hook`
+    (data, {:remove_group, group}                   ) -> State.remove_group(data, group)
+    (data, {:add_node, node, zone}                  ) -> {:ok, State.add_node(data, node, zone)}
+    (data, {:remove_node, node}                     ) -> {:ok, State.remove_node(data, node)}
+    (data, _                                        ) -> {{:error, :invalid_command}, data} # For safety
   end
 
   defun query(data :: t, arg :: RVData.query_arg) :: RVData.query_ret do
