@@ -1,9 +1,8 @@
 use Croma
-alias Croma.TypeGen, as: TG
 
 defmodule RaftFleet.Cluster do
   alias RaftedValue.Data, as: RVData
-  alias RaftFleet.{NodesPerZone, ConsensusGroups, CappedQueue, RecentlyRemovedGroups, MembersPerLeaderNode, PerMemberOptions}
+  alias RaftFleet.{NodesPerZone, ConsensusGroups, RecentlyRemovedGroups, MembersPerLeaderNode, PerMemberOptions}
 
   defmodule Server do
     defun start_link(rv_config :: RaftedValue.Config.t, name :: g[atom]) :: GenServer.on_start do
@@ -53,18 +52,16 @@ defmodule RaftFleet.Cluster do
 
   defmodule State do
     use Croma.Struct, fields: [
-      nodes_per_zone:                   NodesPerZone,
-      consensus_groups:                 ConsensusGroups,
-      recently_removed_consensus_names: TG.nilable(CappedQueue), # kept for backward compatibility; will be removed in favor of `recently_removed_groups`
-      recently_removed_groups:          RecentlyRemovedGroups,
-      members_per_leader_node:          MembersPerLeaderNode,    # this is cache; reproducible from `nodes` and `consensus_groups`
+      nodes_per_zone:          NodesPerZone,
+      consensus_groups:        ConsensusGroups,
+      recently_removed_groups: RecentlyRemovedGroups,
+      members_per_leader_node: MembersPerLeaderNode, # this is cache; reproducible from `nodes` and `consensus_groups`
     ]
 
     def migrate_from_older_version(state) do
-      if Map.has_key?(state, :unhealthy_members_map) do
+      if Map.has_key?(state, :recently_removed_consensus_names) do
         state
-        |> Map.delete(:unhealthy_members_map)
-        |> Map.delete(:node_to_purge)
+        |> Map.delete(:recently_removed_consensus_names)
       else
         state
       end
@@ -184,8 +181,7 @@ defmodule RaftFleet.Cluster do
   @typep t :: State.t
 
   defun new() :: t do
-    q = CappedQueue.new(100)
-    %State{nodes_per_zone: %{}, consensus_groups: %{}, recently_removed_consensus_names: q, recently_removed_groups: RecentlyRemovedGroups.empty(), members_per_leader_node: %{}}
+    %State{nodes_per_zone: %{}, consensus_groups: %{}, recently_removed_groups: RecentlyRemovedGroups.empty(), members_per_leader_node: %{}}
   end
 
   defun command(data :: t, arg :: RVData.command_arg) :: {RVData.command_ret, t} do
