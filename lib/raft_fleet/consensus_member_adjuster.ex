@@ -21,14 +21,7 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
     end
   end
 
-  defp kill_members_of_removed_groups({removed1, removed2}) when is_list(removed2) do
-    # interacting with `RaftFleet.Cluster` of version `< 0.7.0`; this clause will be removed in a future release.
-    Enum.each(removed1, &stop_members_of_removed_group/1)
-    Enum.each(removed2, &stop_members_of_removed_group/1)
-    notify_completion_of_cleanup(List.first(removed1)) # as no `index` is available here, we use the latest removed group name
-  end
   defp kill_members_of_removed_groups({removed_groups, index}) do
-    # interacting with `RaftFleet.Cluster` of version `>= 0.7.0`
     Enum.each(removed_groups, &stop_members_of_removed_group/1)
     notify_completion_of_cleanup(index)
   end
