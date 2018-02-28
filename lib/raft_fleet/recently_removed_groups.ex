@@ -1,7 +1,7 @@
 use Croma
 
 defmodule RaftFleet.RecentlyRemovedGroups do
-  alias RaftFleet.{NodesPerZone, CappedQueue}
+  alias RaftFleet.NodesPerZone
 
   defmodule NodesMap do
     defmodule Pair do
@@ -25,15 +25,6 @@ defmodule RaftFleet.RecentlyRemovedGroups do
     index_to_group:   IndexToGroupName,
     group_to_indices: GroupNameToIndices,
   ]
-
-  # `from_queue/2` is not used since v0.7.0; will be removed.
-  defun from_queue(nodes :: NodesPerZone.t, {_, _, q} :: CappedQueue.t) :: t do
-    now = System.system_time(:milliseconds) # Though it's impure we accept this since (1) this runs only when migrating from older data, and (2) the timestamp will soon be rewritten
-    active_nodes = Enum.flat_map(nodes, fn {_z, ns} -> ns end) |> Map.new(fn n -> {n, {now, nil}} end)
-    t0 = %__MODULE__{empty() | active_nodes: active_nodes}
-    :queue.to_list(q)
-    |> Enum.reduce(t0, fn(group_name, t) -> add(t, group_name) end)
-  end
 
   defun empty() :: t do
     %__MODULE__{active_nodes: %{}, min_index: nil, max_index: nil, index_to_group: %{}, group_to_indices: %{}}
