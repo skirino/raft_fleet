@@ -87,17 +87,17 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
         # We need to take both of the followings into account to correctly find member processes:
         # - currently connected nodes, which may already be deactivated but may still have member processes
         # - participating (active) nodes, which may not be connected due to temporary netsplit
-        connected_nodes        = MapSet.new(Node.list())
-        all_nodes              = Enum.into(participating_nodes, connected_nodes)
-        all_nodes_without_self = MapSet.delete(all_nodes, leader_node)
-        node_with_status_or_reason_pairs0 = Enum.map(all_nodes_without_self, fn n -> {n, try_status({group_name, n})} end)
-        node_with_status_or_reason_pairs  = [{leader_node, status_or_reason} | node_with_status_or_reason_pairs0]
-        {node_with_status_pairs, node_with_error_reason_pairs} = Enum.split_with(node_with_status_or_reason_pairs, &match?({_, %{}}, &1))
-        nodes_with_living_members = Enum.map(node_with_status_pairs, &elem(&1, 0))
-        {undesired_leader, undesired_leader_status} = Enum.map(node_with_status_pairs, &elem(&1, 1)) |> find_leader_from_statuses()
-        nodes_missing               = desired_member_nodes -- nodes_with_living_members
-        nodes_without_living_member = for {n, reason} <- node_with_error_reason_pairs, reason == :noproc, into: MapSet.new(), do: n
-        dead_follower_pids          = Map.get(undesired_leader_status || %{}, :unresponsive_followers, []) |> Enum.filter(&(node(&1) in nodes_without_living_member))
+        all_nodes = Enum.into(participating_nodes, MapSet.new(Node.list()))
+        {node_with_status_pairs, node_with_error_reason_pairs} =
+          try_fetch_all_node_statuses_or_reasons(group_name, all_nodes, leader_node, status_or_reason)
+        {undesired_leader, undesired_leader_status} =
+          Enum.map(node_with_status_pairs, &elem(&1, 1))
+          |> find_leader_from_statuses()
+        nodes_missing = desired_member_nodes -- Enum.map(node_with_status_pairs, &elem(&1, 0))
+        nodes_without_living_member = for {n, :noproc} <- node_with_error_reason_pairs, into: MapSet.new(), do: n
+        dead_follower_pids =
+          Map.get(undesired_leader_status || %{}, :unresponsive_followers, [])
+          |> Enum.filter(&(node(&1) in nodes_without_living_member))
         cond do
           undesired_leader == nil and majority_of_members_definitely_died?(group_name, node_with_status_pairs, node_with_error_reason_pairs) ->
             # Something really bad happened to this consensus group and it's impossible to rescue the group to healthy state;
@@ -110,7 +110,7 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
           undesired_leader != nil and nodes_missing != [] and dead_follower_pids != [] ->
             remove_dead_follower(group_name, undesired_leader, dead_follower_pids)
           undesired_leader != nil ->
-            # As the previous cond branch doesn't match, there must be a member process in this node; replace the leader
+            # As the previous cond branches don't match, there must be a member process in this node; replace the leader
             ret = RaftedValue.replace_leader(undesired_leader, Process.whereis(group_name))
             Logger.info("migrating leader of #{group_name} in #{node(undesired_leader)} to the member in this node: #{inspect(ret)}")
           true -> :ok
@@ -134,6 +134,14 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
         Logger.info("A member (#{inspect(target_pid)}) in #{group_name} is definitely dead; remove it from the group: #{inspect(ret)}")
       _ -> :ok
     end
+  end
+
+  defp try_fetch_all_node_statuses_or_reasons(group_name, all_nodes, node_self, status_or_reason_self) do
+    pairs_without_node_self =
+      MapSet.delete(all_nodes, node_self)
+      |> Enum.map(fn n -> {n, try_status({group_name, n})} end)
+    pairs = [{node_self, status_or_reason_self} | pairs_without_node_self]
+    Enum.split_with(pairs, &match?({_, %{}}, &1))
   end
 
   defp majority_of_members_definitely_died?(group_name, node_with_status_pairs, node_with_error_reason_pairs) do
