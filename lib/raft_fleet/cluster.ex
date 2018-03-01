@@ -58,7 +58,7 @@ defmodule RaftFleet.Cluster do
       members_per_leader_node: MembersPerLeaderNode, # this is cache; reproducible from `nodes` and `consensus_groups`
     ]
 
-    def migrate_from_older_version(state) do
+    defp migrate_from_older_version(state) do
       if Map.has_key?(state, :recently_removed_consensus_names) do
         state
         |> Map.delete(:recently_removed_consensus_names)
