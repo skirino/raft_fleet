@@ -6,7 +6,10 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
   alias RaftFleet.{ConsensusMemberAdjuster, Manager, ConsensusMemberSup}
 
   @group_name :consensus_group
-  @rv_config  RaftedValue.make_config(RaftFleet.JustAnInt)
+  @rv_config RaftedValue.make_config(RaftFleet.JustAnInt, [
+    heartbeat_timeout: 500,
+    election_timeout: 2500, # In travis disk I/O is sometimes rather slow, resulting in more frequent leader elections
+  ])
 
   defp consensus_members() do
     [Node.self() | Node.list()] |> Enum.map(fn n ->
@@ -94,7 +97,7 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
       target_node = hd(Node.list())
       target_pid  = Enum.find(members1, fn pid -> node(pid) == target_node end)
       Process.exit(target_pid, :kill)
-      :timer.sleep(2_000) # wait until the killed process is recognized as "unresponsive" by the consensus leader
+      :timer.sleep(6_000) # wait until the killed process is recognized as "unresponsive" by the consensus leader
 
       call_adjust_one_step()
       %{members: members2} = RaftedValue.status(@group_name)
@@ -127,7 +130,7 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
           pid = Process.whereis(group_name) |> at(n)
           Process.exit(pid, :kill)
         end)
-        :timer.sleep(2_500) # wait until the remaining leader (if any) steps down
+        :timer.sleep(6_000) # wait until the remaining leader (if any) steps down
 
         call_adjust_one_step(group_name)
         assert raft_log_includes_removal_of_group?.(group_name)
@@ -154,7 +157,7 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
         start_leader_and_followers(i2node(leader_node), Enum.map(follower_nodes, &i2node/1))
         follower_pid_to_kill = Process.whereis(@group_name) |> at(i2node(List.last(follower_nodes)))
         assert :gen_statem.stop(follower_pid_to_kill) == :ok
-        :timer.sleep(2_500) # wait until the leader recognize the killed pid as "unhealthy"
+        :timer.sleep(6_000) # wait until the leader recognizes the killed pid as "unhealthy"
 
         status1 = RaftedValue.status({@group_name, i2node(leader_node)})
         assert status1.state_name                                == :leader
@@ -183,9 +186,9 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
       # Simulate that `nodes_half2` are deactivated at this point; only `nodes_half1` are participating now
       Enum.each(1..7, fn _ ->
         ConsensusMemberAdjuster.adjust_one_step(nodes_half1, @group_name, nodes_half1)
-        :timer.sleep(500)
+        :timer.sleep(1_000)
       end)
-      :timer.sleep(1000)
+      :timer.sleep(6_000)
 
       nodes_with_members2 = consensus_members() |> Enum.map(&node/1)
       assert Enum.sort(nodes_with_members2) == Enum.sort(nodes_half1)
