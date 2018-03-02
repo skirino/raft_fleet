@@ -12,7 +12,8 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
   ])
 
   defp consensus_members() do
-    [Node.self() | Node.list()] |> Enum.map(fn n ->
+    [Node.self() | Node.list()]
+    |> Enum.map(fn n ->
       Process.whereis(@group_name) |> at(n)
     end)
     |> Enum.reject(&is_nil/1)

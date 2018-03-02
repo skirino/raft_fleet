@@ -90,30 +90,34 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
         all_nodes = Enum.into(participating_nodes, MapSet.new(Node.list()))
         {node_with_status_pairs, node_with_error_reason_pairs} =
           try_fetch_all_node_statuses_or_reasons(group_name, all_nodes, leader_node, status_or_reason)
-        {undesired_leader, undesired_leader_status} =
-          Enum.map(node_with_status_pairs, &elem(&1, 1))
-          |> find_leader_from_statuses()
-        nodes_missing = desired_member_nodes -- Enum.map(node_with_status_pairs, &elem(&1, 0))
-        nodes_without_living_member = for {n, :noproc} <- node_with_error_reason_pairs, into: MapSet.new(), do: n
-        dead_follower_pids =
-          Map.get(undesired_leader_status || %{}, :unresponsive_followers, [])
-          |> Enum.filter(&(node(&1) in nodes_without_living_member))
-        cond do
-          undesired_leader == nil and majority_of_members_definitely_died?(group_name, node_with_status_pairs, node_with_error_reason_pairs) ->
-            # Something really bad happened to this consensus group and it's impossible to rescue the group to healthy state;
-            # remove the group as a last resort (to prevent from repeatedly failing to add followers).
-            ret = RaftFleet.remove_consensus_group(group_name)
-            Logger.error("majority of members in #{group_name} have failed; remove the group as a last resort: #{inspect(ret)}")
-          (nodes_to_be_added = nodes_missing -- Enum.map(dead_follower_pids, &node/1)) != [] ->
-            leader_node_hint = if is_nil(undesired_leader), do: nil, else: node(undesired_leader)
-            Manager.start_consensus_group_follower(group_name, Enum.random(nodes_to_be_added), leader_node_hint)
-          undesired_leader != nil and nodes_missing != [] and dead_follower_pids != [] ->
-            remove_dead_follower(group_name, undesired_leader, dead_follower_pids)
-          undesired_leader != nil ->
-            # As the previous cond branches don't match, there must be a member process in this node; replace the leader
-            ret = RaftedValue.replace_leader(undesired_leader, Process.whereis(group_name))
-            Logger.info("migrating leader of #{group_name} in #{node(undesired_leader)} to the member in this node: #{inspect(ret)}")
-          true -> :ok
+        case Enum.map(node_with_status_pairs, &elem(&1, 1)) |> find_leader_from_statuses() do
+          nil ->
+            # No leader found; this can be due to temporary issue or permanent failure
+            if majority_of_members_definitely_died?(group_name, node_with_status_pairs, node_with_error_reason_pairs) do
+              # Something really bad happened to this consensus group and it's impossible to rescue the group to healthy state;
+              # remove the group as a last resort (to prevent from repeatedly failing to add followers).
+              ret = RaftFleet.remove_consensus_group(group_name)
+              Logger.error("majority of members in #{group_name} have failed; remove the group as a last resort: #{inspect(ret)}")
+            else
+              :ok # Just wait
+            end
+          {undesired_leader, undesired_leader_status} ->
+            nodes_missing = desired_member_nodes -- Enum.map(node_with_status_pairs, &elem(&1, 0))
+            nodes_without_living_member = for {n, :noproc} <- node_with_error_reason_pairs, into: MapSet.new(), do: n
+            dead_follower_pids =
+              Map.get(undesired_leader_status || %{}, :unresponsive_followers, [])
+              |> Enum.filter(&(node(&1) in nodes_without_living_member))
+            cond do
+              (nodes_to_be_added = nodes_missing -- Enum.map(dead_follower_pids, &node/1)) != [] ->
+                leader_node_hint = if is_nil(undesired_leader), do: nil, else: node(undesired_leader)
+                Manager.start_consensus_group_follower(group_name, Enum.random(nodes_to_be_added), leader_node_hint)
+              nodes_missing != [] and dead_follower_pids != [] ->
+                remove_dead_follower(group_name, undesired_leader, dead_follower_pids)
+              true ->
+                # As the previous cond branches don't match, there must be a member process in this node; replace the leader
+                ret = RaftedValue.replace_leader(undesired_leader, Process.whereis(group_name))
+                Logger.info("migrating leader of #{group_name} in #{node(undesired_leader)} to the member in this node: #{inspect(ret)}")
+            end
         end
     end
   end
@@ -173,11 +177,11 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
     end
   end
 
-  defp find_leader_from_statuses([]), do: {nil, nil}
+  defp find_leader_from_statuses([]), do: nil
   defp find_leader_from_statuses(statuses) do
     Enum.filter(statuses, &match?(%{state_name: :leader}, &1))
     |> case do
-      [] -> {nil, nil}
+      [] -> nil
       ss ->
         s = Enum.max_by(ss, &(&1.current_term))
         {s.leader, s}
