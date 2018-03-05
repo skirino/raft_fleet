@@ -114,31 +114,106 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
     end)
   end
 
-  test "adjust_one_step/3 should remove consensus group whose majority of members are definitely dead" do
+  test "adjust_one_step/3 should remove stale member in inactive and disconnected node (with an established leader)" do
+    with_active_slaves([:"2", :"3"], fn ->
+      nodes_2_3 = Node.list()
+      n4 =
+        with_slaves([:"4"], fn ->
+          [n4] = Node.list() -- nodes_2_3
+          activate_node(n4, &zone(&1, 1))
+          start_leader_and_followers(Node.self(), Node.list())
+          n4
+        end)
+      :timer.sleep(6_000) # wait until the killed process is recognized as "unresponsive" by the consensus leader
+
+      %{leader: l, members: members1} = RaftedValue.status(@group_name)
+      assert is_pid(l)
+      assert length(members1) == 4
+      call_adjust_one_step()
+      %{leader: ^l, members: members2} = RaftedValue.status(@group_name)
+      assert length(members2) == 3
+      [p4] = members1 -- members2
+      assert node(p4) == n4
+
+      kill_all_consensus_members()
+      RaftFleet.remove_dead_pids_located_in_dead_node(n4) # clean up `RaftFleet.Cluster` consensus group
+    end)
+  end
+
+  test "adjust_one_step/3 should remove stale member in inactive and disconnected node (with no established leader)" do
+    with_active_slaves([:"2"], fn ->
+      [n2] = Node.list()
+      nodes_3_4 =
+        with_slaves([:"3", :"4"], fn ->
+          ns34 = Node.list() -- [n2]
+          Enum.each(ns34, fn n -> activate_node(n, &zone(&1, 1)) end)
+          start_leader_and_followers(Node.self(), Node.list())
+          ns34
+        end)
+
+      :timer.sleep(5_000) # wait until the leader steps down
+      %{leader: nil, members: members1} = RaftedValue.status(@group_name)
+      assert length(members1) == 4
+      :timer.sleep(5_000) # wait until max election timeout elapses after the member in `n2` last received a heartbeat
+      %{leader: nil, members: members2} = RaftedValue.status({@group_name, n2})
+      assert length(members2) == 4
+      call_adjust_one_step()
+      :timer.sleep(4_000) # wait until a new leader is elected
+      %{leader: l, members: members3} = RaftedValue.status(@group_name)
+      assert is_pid(l)
+      assert length(members3) == 3
+      %{leader: ^l, members: members4} = RaftedValue.status({@group_name, n2})
+      assert length(members4) == 3
+
+      kill_all_consensus_members()
+      Enum.each(nodes_3_4, fn n ->
+        RaftFleet.remove_dead_pids_located_in_dead_node(n) # clean up `RaftFleet.Cluster` consensus group
+      end)
+    end)
+  end
+
+  test "adjust_one_step/3 should recover from majority failure by removing dead pid" do
+    with_active_slaves([:"2", :"3"], fn ->
+      start_leader_and_followers(Node.self(), Node.list())
+      %{leader: l, members: members} = RaftedValue.status(@group_name)
+      assert is_pid(l)
+      assert node(l) == Node.self()
+      Enum.each(members -- [l], fn m ->
+        :ok = :gen_statem.stop(m)
+      end)
+      :timer.sleep(6_000) # wait until the remaining leader steps down
+
+      %{leader: nil, members: ^members} = RaftedValue.status(@group_name)
+      call_adjust_one_step()
+      %{leader: nil, members: members2} = RaftedValue.status(@group_name)
+      assert length(members2) == 2
+      call_adjust_one_step()
+      %{members: [^l]} = RaftedValue.status(@group_name)
+      :timer.sleep(5_000) # wait for election timeout to check that the remaining process correctly becomes leader
+      %{leader: ^l, members: [^l]} = RaftedValue.status(@group_name)
+
+      kill_all_consensus_members()
+    end)
+  end
+
+  test "adjust_one_step/3 should remove consensus group when all members are definitely dead" do
     with_active_slaves([:"2", :"3"], fn ->
       # To avoid complication due to periodic adjustment process, we don't add_consensus_group here;
       # to judge whether `:remove_group` is done, we look into Raft logs.
-      raft_log_includes_removal_of_group? = fn(group_name) ->
+      raft_log_includes_removal_of_group? = fn ->
         {_, state} = :sys.get_state(RaftFleet.Cluster)
-        Enum.any?(state.logs.map, &match?({i, {_term, i, :command, {_from, {:remove_group, ^group_name}, _ref}}}, &1))
+        Enum.any?(state.logs.map, &match?({i, {_term, i, :command, {_from, {:remove_group, @group_name}, _ref}}}, &1))
       end
 
-      exec = fn(target_nodes, group_name) ->
-        start_leader_and_followers(Node.self(), Node.list(), group_name)
-        refute raft_log_includes_removal_of_group?.(group_name)
-
-        Enum.each(target_nodes, fn n ->
-          pid = Process.whereis(group_name) |> at(n)
-          Process.exit(pid, :kill)
-        end)
-        :timer.sleep(6_000) # wait until the remaining leader (if any) steps down
-
-        call_adjust_one_step(group_name)
-        assert raft_log_includes_removal_of_group?.(group_name)
-      end
-
-      [Node.self() | Node.list()]                        |> exec.(:consensus_group_1)
-      [Node.self() | Node.list()] |> Enum.take_random(2) |> exec.(:consensus_group_2)
+      start_leader_and_followers(Node.self(), Node.list())
+      Enum.each([Node.self() | Node.list()], fn n ->
+        pid = Process.whereis(@group_name) |> at(n)
+        Process.exit(pid, :kill)
+      end)
+      refute raft_log_includes_removal_of_group?.()
+      call_adjust_one_step()
+      :timer.sleep(1_000)
+      assert raft_log_includes_removal_of_group?.()
     end)
   end
 

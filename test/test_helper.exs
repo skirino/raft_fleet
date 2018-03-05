@@ -17,8 +17,9 @@ defmodule SlaveNode do
 
   def with_slaves(shortnames, persist \\ :random, f) do
     Enum.each(shortnames, &start_slave(&1, persist))
-    f.()
+    ret = f.()
     Enum.each(shortnames, &stop_slave/1)
+    ret
   end
 
   def start_slave(shortname, persist \\ :random) do
