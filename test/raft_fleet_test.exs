@@ -295,7 +295,7 @@ defmodule RaftFleetTest do
   end
 
   defp wait_until_node_recognized_as_unreachable(node, tries \\ 0) do
-    if tries > 10 do
+    if tries > 15 do
       raise "NodeReconnector couldn't detect failing node '#{node}'!"
     else
       :timer.sleep(3_000)
