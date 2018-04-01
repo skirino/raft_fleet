@@ -113,7 +113,7 @@ When terminating a node you should proceed as follows
 it's much better to tell `raft_fleet` to make preparations beforehand):
 
 1. call `RaftFleet.deactivate/0` within the node-to-be-terminated,
-2. wait for a while (say, 10 min) so that existing consensus group members are successfully migrated to the remaining nodes, then
+2. wait for a while (say, 10 min) so that existing consensus group members are migrated to the other nodes, then
 3. finally shutdown the node.
 
 ## Links

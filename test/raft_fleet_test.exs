@@ -126,10 +126,10 @@ defmodule RaftFleetTest do
   end
 
   cluster_node_zone_configurations = [
-    {1, 1},
+#    {1, 1},
     {3, 3},
     {4, 2},
-    {6, 3},
+#    {6, 3},
   ]
 
   Enum.each(cluster_node_zone_configurations, fn {n_nodes, n_zones} ->
@@ -295,10 +295,10 @@ defmodule RaftFleetTest do
   end
 
   defp wait_until_node_recognized_as_unreachable(node, tries \\ 0) do
-    if tries > 15 do
+    if tries > 20 do
       raise "NodeReconnector couldn't detect failing node '#{node}'!"
     else
-      :timer.sleep(3_000)
+      :timer.sleep(5_000)
       unreachable_nodes = RaftFleet.unreachable_nodes()
       if Map.keys(unreachable_nodes) == [node] do
         unreachable_nodes[node]
