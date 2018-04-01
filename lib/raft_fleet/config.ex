@@ -5,6 +5,7 @@ defmodule RaftFleet.Config do
   @default_node_purge_failure_time_window    (if Mix.env() == :test, do: 30_000, else: 600_000)
   @default_node_purge_reconnect_interval     (if Mix.env() == :test, do:  5_000, else:  60_000)
   @default_leader_pid_cache_refresh_interval 300_000
+  @default_follower_addition_delay           200
 
   @moduledoc """
   RaftFleet defines the following application configs:
@@ -19,6 +20,13 @@ defmodule RaftFleet.Config do
       - The actual value used is obtained by
         `Application.get_env(:raft_fleet, :leader_pid_cache_refresh_interval, #{@default_leader_pid_cache_refresh_interval})`,
         i.e. it defaults to #{div(@default_leader_pid_cache_refresh_interval, 60_000)} minutes.
+  - `:follower_addition_delay`
+      - Time duration in milliseconds to wait for before spawning a new follower for a consensus group.
+        Concurrently spawning multiple followers may lead to race conditions (adding a node can only be done one-by-one).
+        Although this race condition can be automatically resolved by retries and thus is basically harmless,
+        this configuration item may be useful to reduce useless error logs.
+      - The actual value used is obtained by
+        `Application.get_env(:raft_fleet, :follower_addition_delay, #{@default_follower_addition_delay})`.
   - `:node_purge_failure_time_window`
       - A node is considered "unhealthy" if it has been disconnected from the other nodes
         without declaring itself as `inactive` (by calling `RaftFleet.deactivate/0`).
@@ -58,6 +66,10 @@ defmodule RaftFleet.Config do
 
   defun leader_pid_cache_refresh_interval() :: pos_integer do
     Application.get_env(:raft_fleet, :leader_pid_cache_refresh_interval, @default_leader_pid_cache_refresh_interval)
+  end
+
+  defun follower_addition_delay() :: pos_integer do
+    Application.get_env(:raft_fleet, :follower_addition_delay, @default_follower_addition_delay)
   end
 
   defun node_purge_failure_time_window() :: pos_integer do

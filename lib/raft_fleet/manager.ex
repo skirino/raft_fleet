@@ -135,7 +135,7 @@ defmodule RaftFleet.Manager do
     List.delete(member_nodes, Node.self())
     |> Enum.with_index()
     |> Enum.each(fn {node, i} ->
-      start_consensus_group_follower(name, node, Node.self(), i * 100)
+      start_consensus_group_follower(name, node, Node.self(), i * Config.follower_addition_delay())
     end)
   end
 
@@ -152,7 +152,7 @@ defmodule RaftFleet.Manager do
           nil               -> :ok
           dead_follower_pid -> spawn(fn -> try_to_remove_dead_follower(name, dead_follower_pid) end)
         end
-        :timer.sleep(500)
+        :timer.sleep(2 * Config.follower_addition_delay())
         start_follower_with_retry(other_node_members, name, tries_remaining - 1)
     end
   end
@@ -163,9 +163,9 @@ defmodule RaftFleet.Manager do
 
   defp try_to_remove_dead_follower(name, dead_follower_pid) do
     case RaftFleet.whereis_leader(name) do
-      nil    -> :ok
+      nil    -> :ok # give up
       leader ->
-        :timer.sleep(100) # reduce possibility of race condition: `:uncommitted_membership_change`
+        :timer.sleep(Config.follower_addition_delay()) # reduce possibility of race condition: `:uncommitted_membership_change`
         RaftedValue.remove_follower(leader, dead_follower_pid)
     end
   end
