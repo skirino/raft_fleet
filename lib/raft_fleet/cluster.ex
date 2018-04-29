@@ -161,6 +161,7 @@ defmodule RaftFleet.Cluster do
 
     @behaviour RaftedValue.LeaderHook
 
+    @impl true
     def on_command_committed(_state_before, entry, ret, _state_after) do
       case entry do
         {:add_group, group_name, _, rv_config, leader_node} ->
@@ -169,26 +170,53 @@ defmodule RaftFleet.Cluster do
           if Node.self() == leader_node do
             case ret do
               {:error, _}  -> nil
-              {:ok, nodes} -> Manager.start_consensus_group_members(group_name, rv_config, nodes)
+              {:ok, nodes} ->
+                restoring? = Process.get(:rafted_value_restoring, false)
+                if not restoring? do
+                  Manager.start_consensus_group_members(group_name, rv_config, nodes)
+                end
             end
           end
         _ -> nil
       end
     end
+
+    @impl true
     def on_query_answered(_, _, _), do: nil
-    def on_follower_added(_, _)   , do: nil
-    def on_follower_removed(_, _) , do: nil
-    def on_elected(_)             , do: nil
-    def on_restored_from_files(_) , do: nil
+
+    @impl true
+    def on_follower_added(_, _), do: nil
+
+    @impl true
+    def on_follower_removed(_, _), do: nil
+
+    @impl true
+    def on_elected(_), do: nil
+
+    @impl true
+    def on_restored_from_files(%State{consensus_groups: gs}) do
+      case RaftFleet.Config.rafted_value_config_maker() do
+        nil -> :ok
+        mod ->
+          # As it's right after 1st activation, it's highly likely that the cluster consists of only 1 node;
+          # let's start consensus groups with 1 member.
+          target_nodes = [Node.self()]
+          Enum.each(gs, fn {g, _} ->
+            Manager.start_consensus_group_members(g, mod.make(g), target_nodes)
+          end)
+      end
+    end
   end
 
   @behaviour RVData
   @typep t :: State.t
 
+  @impl true
   defun new() :: t do
     %State{nodes_per_zone: %{}, consensus_groups: %{}, recently_removed_groups: RecentlyRemovedGroups.empty(), members_per_leader_node: %{}}
   end
 
+  @impl true
   defun command(data :: t, arg :: RVData.command_arg) :: {RVData.command_ret, t} do
     (data, {:add_group, group, n, _rv_config, _node}        ) -> State.add_group(data, group, n) # `rv_config` and `node` will be used in `Hook`
     (data, {:remove_group, group}                           ) -> State.remove_group(data, group)
@@ -198,6 +226,7 @@ defmodule RaftFleet.Cluster do
     (data, _                                                ) -> {{:error, :invalid_command}, data} # For safety
   end
 
+  @impl true
   defun query(data :: t, arg :: RVData.query_arg) :: RVData.query_ret do
     (%State{nodes_per_zone: nodes, members_per_leader_node: members, recently_removed_groups: removed}, {:consensus_groups, node}) ->
       participating_nodes = Enum.flat_map(nodes, fn {_z, ns} -> ns end)

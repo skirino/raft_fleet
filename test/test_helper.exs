@@ -137,7 +137,10 @@ defmodule TestCaseTemplate do
 
   setup do
     # For clean testing we restart :raft_fleet
-    :ok = Application.stop(:raft_fleet)
+    case Application.stop(:raft_fleet) do
+      :ok                                   -> :ok
+      {:error, {:not_started, :raft_fleet}} -> :ok
+    end
     PersistenceSetting.randomly_pick_whether_to_persist()
     File.rm_rf!("tmp")
     :ok = Application.start(:raft_fleet)
