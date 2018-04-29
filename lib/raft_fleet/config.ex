@@ -54,7 +54,19 @@ defmodule RaftFleet.Config do
         also uses `:per_member_options_maker` module (if set).
         Callback implementation must handle `RaftFleet.Cluster` appropriately, in addition to consensus group names
         that are explicitly added by `RaftFleet.add_consensus_group/3`.
-      - Note also that you cannot specify `:name` by callback implementation as it's fixed by `:raft_fleet`.
+      - Note also that you cannot specify `:name` option by your callback implementation as it's fixed by `:raft_fleet`.
+  - `:rafted_value_config_maker`
+      - A module that implements `RaftFleet.RaftedValueConfigMaker` behaviour.
+        The module is used when `:raft_fleet` needs to construct a `t:RaftedValue.Config.t/0`.
+        To be more precise, it's used
+          1. in `RaftFleet.add_consensus_group/1`, or
+          2. when restoring `RaftFleet.Cluster` and the other consensus groups from log & snapshot files.
+      - Defaults to `nil`, which means that
+          1. `RaftFleet.add_consensus_group/1` cannot be used (you must use `RaftFleet.add_consensus_group/3` instead), and
+          2. when restoring from log & snapshot files, some of consensus groups may not be restored.
+      - Note that you can customize the `t:RaftedValue.Config.t/0` used by the `RaftFleet.Cluster` consensus group.
+        If you are not interested in customizing that  value, you can use `RaftFleet.Cluster.default_rv_config/0`
+        in your callback module.
 
   Note that each raft_fleet process uses application configs stored in the local node.
   If you want to configure the options above you must set them on all nodes in your cluster.
@@ -82,6 +94,10 @@ defmodule RaftFleet.Config do
 
   defun per_member_options_maker() :: nil | module do
     Application.get_env(:raft_fleet, :per_member_options_maker)
+  end
+
+  defun rafted_value_config_maker() :: nil | module do
+    Application.get_env(:raft_fleet, :rafted_value_config_maker)
   end
 end
 

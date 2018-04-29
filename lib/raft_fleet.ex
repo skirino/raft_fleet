@@ -77,7 +77,21 @@ defmodule RaftFleet do
   @doc """
   Registers a new consensus group identified by `name`.
 
-  `name` is used as a registered name for member processes of the new consensus group.
+  This is a simplified version of `add_consensus_group/3`, where
+  - `n_replica` is filled with `3` (fixed value) and
+  - `rv_config` is computed using the module given as `:rafted_value_config_maker` option (see also `RaftFleet.Config`).
+  """
+  defun add_consensus_group(name :: g[atom]) :: :ok | {:error, :already_added | :no_leader | any} do
+    case RaftFleet.Config.rafted_value_config_maker() do
+      nil -> raise "No module is specified as `:rafted_value_config_maker` option!"
+      mod -> add_consensus_group(name, 3, mod.make(name))
+    end
+  end
+
+  @doc """
+  Registers a new consensus group identified by `name`.
+
+  `name` is used as the registered name for member processes of the new consensus group.
   `n_replica` is the number of replicas (Raft member processes implemented as `RaftedValue.Server`).
   If you want all active nodes to host member processes, specify sufficiently large integer as `n_replica`.
   For explanation of `rv_config` see `RaftedValue.make_config/2`.

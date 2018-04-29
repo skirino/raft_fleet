@@ -5,6 +5,8 @@ defmodule RaftFleet.Cluster do
   alias RaftFleet.{NodesPerZone, ConsensusGroups, RecentlyRemovedGroups, MembersPerLeaderNode, PerMemberOptions}
 
   defmodule Server do
+    alias RaftFleet.Cluster
+
     defun start_link(rv_config :: RaftedValue.Config.t, name :: g[atom]) :: GenServer.on_start do
       # Use lock facility provided by :global module to avoid race conditions
       :global.trans({:raft_fleet_cluster_state_initialization, self()}, fn ->
@@ -44,9 +46,12 @@ defmodule RaftFleet.Cluster do
     end
 
     defun child_spec() :: Supervisor.Spec.spec do
-      alias RaftFleet.Cluster, as: C
-      rv_config = RaftedValue.make_config(C, [leader_hook_module: C.Hook, election_timeout_clock_drift_margin: 500])
-      Supervisor.Spec.worker(__MODULE__, [rv_config, C], [restart: :transient])
+      rv_config =
+        case RaftFleet.Config.rafted_value_config_maker() do
+          nil -> Cluster.default_rv_config()
+          mod -> mod.make(Cluster)
+        end
+      Supervisor.Spec.worker(__MODULE__, [rv_config, Cluster], [restart: :transient])
     end
   end
 
@@ -202,5 +207,9 @@ defmodule RaftFleet.Cluster do
     (%State{nodes_per_zone: nodes}, :active_nodes)        -> nodes
     (%State{consensus_groups: groups}, :consensus_groups) -> groups
     (_, _)                                                -> {:error, :invalid_query} # For safety
+  end
+
+  defun default_rv_config() :: RaftedValue.Config.t do
+    RaftedValue.make_config(__MODULE__, [leader_hook_module: Hook, election_timeout_clock_drift_margin: 500])
   end
 end
