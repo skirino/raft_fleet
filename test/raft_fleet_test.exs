@@ -273,11 +273,11 @@ defmodule RaftFleetTest do
     assert n3 in state.other_active_nodes
     :timer.sleep(8_000) # at least 1 timeout in NodeReconnector before stopping :"2"
 
-    time_before_failure = System.system_time(:seconds)
+    time_before_failure = System.system_time(:second)
     stop_slave(:"2")
     unreachable_since = wait_until_node_recognized_as_unreachable(n2)
     assert unreachable_since >= time_before_failure
-    assert unreachable_since <= System.system_time(:seconds)
+    assert unreachable_since <= System.system_time(:second)
 
     :timer.sleep(32_000) # wait for `node_purge_failure_time_window`
     active_nodes2 = RaftFleet.active_nodes() |> Enum.flat_map(fn {_z, ns} -> ns end)
