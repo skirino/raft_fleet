@@ -76,7 +76,7 @@ defmodule RaftFleet.NodeReconnector do
     end
 
     def unreachable_nodes(%__MODULE__{unhealthy_since: map}) do
-      offset = System.time_offset(:milliseconds)
+      offset = System.time_offset(:millisecond)
       Map.new(map, fn {n, monotonic} -> {n, div(offset + monotonic, 1000)} end)
     end
   end
