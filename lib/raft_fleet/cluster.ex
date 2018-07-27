@@ -45,13 +45,19 @@ defmodule RaftFleet.Cluster do
       end
     end
 
-    defun child_spec() :: Supervisor.Spec.spec do
+    defun child_spec() :: Supervisor.child_spec do
       rv_config =
         case RaftFleet.Config.rafted_value_config_maker() do
           nil -> Cluster.default_rv_config()
           mod -> mod.make(Cluster)
         end
-      Supervisor.Spec.worker(__MODULE__, [rv_config, Cluster], [restart: :transient])
+      %{
+        id:       __MODULE__,
+        start:    {__MODULE__, :start_link, [rv_config, Cluster]},
+        type:     :worker,
+        restart:  :transient,
+        shutdown: 5000,
+      }
     end
   end
 

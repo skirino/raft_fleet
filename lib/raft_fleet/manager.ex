@@ -48,7 +48,7 @@ defmodule RaftFleet.Manager do
     defp convert_to_reply(:process_exists             ), do: {:error, :process_exists}
   end
 
-  defun start_link() :: GenServer.on_start do
+  defun start_link([]) :: GenServer.on_start do
     GenServer.start_link(__MODULE__, :ok, [name: __MODULE__])
   end
 

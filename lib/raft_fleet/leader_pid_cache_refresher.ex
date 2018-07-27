@@ -8,7 +8,7 @@ defmodule RaftFleet.LeaderPidCacheRefresher do
   use GenServer
   alias RaftFleet.{Config, LeaderPidCache, Util}
 
-  defun start_link() :: {:ok, pid} do
+  defun start_link([]) :: {:ok, pid} do
     GenServer.start_link(__MODULE__, :ok, [])
   end
 

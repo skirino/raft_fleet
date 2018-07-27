@@ -81,7 +81,7 @@ defmodule RaftFleet.NodeReconnector do
     end
   end
 
-  defun start_link() :: GenServer.on_start do
+  defun start_link([]) :: GenServer.on_start do
     GenServer.start_link(__MODULE__, :ok, [name: __MODULE__])
   end
 

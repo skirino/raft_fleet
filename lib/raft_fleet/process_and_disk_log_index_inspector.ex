@@ -15,7 +15,7 @@ defmodule RaftFleet.ProcessAndDiskLogIndexInspector do
   alias RaftedValue.LogIndex
   alias RaftFleet.PerMemberOptions
 
-  defun start_link() :: {:ok, pid} do
+  defun start_link([]) :: {:ok, pid} do
     GenServer.start_link(__MODULE__, :ok, [name: __MODULE__])
   end
 
