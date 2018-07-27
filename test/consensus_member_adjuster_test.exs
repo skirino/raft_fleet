@@ -33,7 +33,7 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
       :timer.sleep(1000)
       Manager.start_consensus_group_follower(group_name, n, leader_node)
     end)
-    :timer.sleep(1000)
+    :timer.sleep(2000)
   end
 
   defp call_adjust_one_step(group_name \\ @group_name) do
@@ -212,7 +212,7 @@ defmodule RaftFleet.ConsensusMemberAdjusterTest do
       end)
       refute raft_log_includes_removal_of_group?.()
       call_adjust_one_step()
-      :timer.sleep(1_000)
+      :timer.sleep(2_000)
       assert raft_log_includes_removal_of_group?.()
     end)
   end

@@ -275,7 +275,7 @@ defmodule RaftFleetTest do
 
     time_before_failure = System.system_time(:second)
     stop_slave(:"2")
-    unreachable_since = wait_until_node_recognized_as_unreachable(n2)
+    unreachable_since = wait_until_node_recognized_as_unreachable(n2, n3)
     assert unreachable_since >= time_before_failure
     assert unreachable_since <= System.system_time(:second)
 
@@ -294,16 +294,17 @@ defmodule RaftFleetTest do
     assert RaftFleet.unreachable_nodes() == %{}
   end
 
-  defp wait_until_node_recognized_as_unreachable(node, tries \\ 0) do
-    if tries > 20 do
-      raise "NodeReconnector couldn't detect failing node '#{node}'!"
+  defp wait_until_node_recognized_as_unreachable(node2, node3, tries \\ 0) do
+    if tries > 100 do
+      raise "NodeReconnector couldn't detect failing node '#{node2}'!"
     else
-      :timer.sleep(5_000)
-      unreachable_nodes = RaftFleet.unreachable_nodes()
-      if Map.keys(unreachable_nodes) == [node] do
-        unreachable_nodes[node]
-      else
-        wait_until_node_recognized_as_unreachable(node, tries + 1)
+      :timer.sleep(1_000)
+      # We don't care whether Node.self() or node3 detects that node2 is failing.
+      unreachable_nodes1 = RaftFleet.unreachable_nodes()
+      unreachable_nodes3 = RaftFleet.unreachable_nodes() |> at(node3)
+      case Map.merge(unreachable_nodes1, unreachable_nodes3) do
+        %{^node2 => since} -> since
+        _                  -> wait_until_node_recognized_as_unreachable(node2, node3, tries + 1)
       end
     end
   end
