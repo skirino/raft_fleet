@@ -8,7 +8,6 @@ defmodule RaftFleet do
   """
 
   use Application
-  alias Supervisor.Spec
   alias RaftedValue.Data
   alias RaftFleet.{Cluster, Manager, NodeReconnector, LeaderPidCache, ZoneId, Util}
 
@@ -16,7 +15,7 @@ defmodule RaftFleet do
   def start(_type, _args) do
     LeaderPidCache.init()
     children = [
-      Spec.supervisor(RaftFleet.ConsensusMemberSup, []),
+      RaftFleet.ConsensusMemberSup,
       Manager,
       NodeReconnector,
       RaftFleet.LeaderPidCacheRefresher,

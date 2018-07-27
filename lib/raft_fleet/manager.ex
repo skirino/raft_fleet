@@ -110,7 +110,7 @@ defmodule RaftFleet.Manager do
           node -> [node | List.delete(Node.list(), node)] # reorder nodes so that the new follower can find leader immediately (most of the time)
         end
       other_node_members = Enum.map(other_node_list, fn n -> {name, n} end)
-      # To avoid blocking the Manager process, we spawn a temporary process solely for `Supervisor.start_child/2`.
+      # To avoid blocking the Manager process, we spawn a temporary process solely for `:supervisor.start_child/2`.
       spawn_link(fn -> start_follower_with_retry(other_node_members, name, 3) end)
     end
     {:noreply, state}
@@ -118,7 +118,7 @@ defmodule RaftFleet.Manager do
 
   defp start_leader_and_tell_other_nodes_to_start_follower(name, rv_config, member_nodes, state) do
     additional_args = [{:create_new_consensus_group, rv_config}, name]
-    case Supervisor.start_child(ConsensusMemberSup, additional_args) do
+    case :supervisor.start_child(ConsensusMemberSup, additional_args) do
       {:ok, _pid} ->
         tell_other_nodes_to_start_followers_with_delay(name, member_nodes)
         State.update_being_added_consensus_groups(state, name, :leader_started)
@@ -144,7 +144,7 @@ defmodule RaftFleet.Manager do
     {:error, :cannot_start_child}
   end
   defp start_follower_with_retry(other_node_members, name, tries_remaining) do
-    case Supervisor.start_child(ConsensusMemberSup, [{:join_existing_consensus_group, other_node_members}, name]) do
+    case :supervisor.start_child(ConsensusMemberSup, [{:join_existing_consensus_group, other_node_members}, name]) do
       {:ok, pid}                        -> {:ok, pid}
       {:error, {:already_started, pid}} -> {:ok, pid}
       {:error, reason}                  ->
