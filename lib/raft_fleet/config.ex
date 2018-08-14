@@ -65,7 +65,7 @@ defmodule RaftFleet.Config do
           1. `RaftFleet.add_consensus_group/1` cannot be used (you must use `RaftFleet.add_consensus_group/3` instead), and
           2. when restoring from log & snapshot files, some of consensus groups may not be restored.
       - Note that you can customize the `t:RaftedValue.Config.t/0` used by the `RaftFleet.Cluster` consensus group.
-        If you are not interested in customizing that  value, you can use `RaftFleet.Cluster.default_rv_config/0`
+        If you are not interested in customizing that value, you can use `RaftFleet.Cluster.default_rv_config/0`
         in your callback module.
 
   Note that each raft_fleet process uses application configs stored in the local node.
