@@ -48,7 +48,7 @@ defmodule RaftFleet.Cluster do
     defun child_spec() :: Supervisor.child_spec do
       rv_config =
         case RaftFleet.Config.rafted_value_config_maker() do
-          nil -> Cluster.default_rv_config()
+          nil -> Cluster.make_rv_config()
           mod -> mod.make(Cluster)
         end
       %{
@@ -246,7 +246,18 @@ defmodule RaftFleet.Cluster do
     (_, _)                                                -> {:error, :invalid_query} # For safety
   end
 
+  @default_rv_config_options [
+    election_timeout_clock_drift_margin: 500,
+    leader_hook_module:                  Hook,
+  ]
+
+  defun make_rv_config(rv_config_options :: Keyword.t \\ @default_rv_config_options) :: RaftedValue.Config.t do
+    opts = Keyword.put(rv_config_options, :leader_hook_module, Hook) # :leader_hook_module must not be changed
+    RaftedValue.make_config(__MODULE__, opts)
+  end
+
+  @deprecated "Use `make_rv_config/1` instead"
   defun default_rv_config() :: RaftedValue.Config.t do
-    RaftedValue.make_config(__MODULE__, [leader_hook_module: Hook, election_timeout_clock_drift_margin: 500])
+    RaftedValue.make_config(__MODULE__, @default_rv_config_options)
   end
 end

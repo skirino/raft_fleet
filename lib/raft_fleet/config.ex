@@ -55,8 +55,7 @@ defmodule RaftFleet.Config do
           2. when restoring from log & snapshot files, some consensus groups may not be restored
             (this limitation comes from the current implementation, but we don't have plan to fix this issue).
       - Note that you can customize the `t:RaftedValue.Config.t/0` used by the `RaftFleet.Cluster` consensus group.
-        If you are not interested in customizing that value, you can use `RaftFleet.Cluster.default_rv_config/0`
-        in your callback module.
+        You can use `RaftFleet.Cluster.make_rv_config/1` in your callback implementation.
       - Note also that libraries using `:raft_fleet` may add their own consensus groups
         (just as in the same way as `RaftFleet.Cluster` expained above).
         Implementations of `RaftFleet.RaftedValueConfigMaker` behaviour must be aware of such consensus groups

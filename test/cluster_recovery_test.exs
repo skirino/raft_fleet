@@ -8,7 +8,7 @@ defmodule RaftFleet.ClusterRecoveryTest do
     @impl true
     def make(name) do
       case name do
-        RaftFleet.Cluster -> RaftFleet.Cluster.default_rv_config()
+        RaftFleet.Cluster -> RaftFleet.Cluster.make_rv_config()
         _                 ->
           RaftedValue.make_config(RaftFleet.JustAnInt, [
             heartbeat_timeout: 500,
