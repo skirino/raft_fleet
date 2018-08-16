@@ -22,7 +22,7 @@ defmodule RaftFleet.Config do
         i.e. it defaults to #{div(@default_leader_pid_cache_refresh_interval, 60_000)} minutes.
   - `:follower_addition_delay`
       - Time duration in milliseconds to wait for before spawning a new follower for a consensus group.
-        Concurrently spawning multiple followers may lead to race conditions (adding a node can only be done one-by-one).
+        Concurrently spawning multiple followers may lead to race conditions (adding a member can only be done one-by-one).
         Although this race condition can be automatically resolved by retries and thus is basically harmless,
         this configuration item may be useful to reduce useless error logs.
       - The actual value used is obtained by
@@ -43,6 +43,24 @@ defmodule RaftFleet.Config do
       - The actual value used is obtained by
         `Application.get_env(:raft_fleet, :node_purge_reconnect_interval, #{@default_node_purge_reconnect_interval})`,
         i.e. it defaults to #{div(@default_node_purge_reconnect_interval, 60_000)} minute.
+  - `:rafted_value_config_maker`
+      - A module that implements `RaftFleet.RaftedValueConfigMaker` behaviour.
+        The module is used when `:raft_fleet` needs to construct a `t:RaftedValue.Config.t/0`.
+        To be more precise, it's used
+          1. in `RaftFleet.add_consensus_group/1`, or
+          2. when restoring `RaftFleet.Cluster` and the other consensus groups from log & snapshot files.
+      - We recommend that you specify your own callback module as `:rafted_value_config_maker`, since, if omitted,
+        you have the following limitations:
+          1. `RaftFleet.add_consensus_group/1` cannot be used (you must use `RaftFleet.add_consensus_group/3` instead), and
+          2. when restoring from log & snapshot files, some consensus groups may not be restored
+            (this limitation comes from the current implementation, but we don't have plan to fix this issue).
+      - Note that you can customize the `t:RaftedValue.Config.t/0` used by the `RaftFleet.Cluster` consensus group.
+        If you are not interested in customizing that value, you can use `RaftFleet.Cluster.default_rv_config/0`
+        in your callback module.
+      - Note also that libraries using `:raft_fleet` may add their own consensus groups
+        (just as in the same way as `RaftFleet.Cluster` expained above).
+        Implementations of `RaftFleet.RaftedValueConfigMaker` behaviour must be aware of such consensus groups
+        and return appropriate configuration when `c:RaftFleet.RaftedValueConfigMaker.make/1` is called.
   - `:per_member_options_maker`
       - A module that implements `RaftFleet.PerMemberOptionsMaker` behaviour.
         The module is used when constructing a 2nd argument of `RaftedValue.start_link/2`,
@@ -55,18 +73,6 @@ defmodule RaftFleet.Config do
         Callback implementation must handle `RaftFleet.Cluster` appropriately, in addition to consensus group names
         that are explicitly added by `RaftFleet.add_consensus_group/3`.
       - Note also that you cannot specify `:name` option by your callback implementation as it's fixed by `:raft_fleet`.
-  - `:rafted_value_config_maker`
-      - A module that implements `RaftFleet.RaftedValueConfigMaker` behaviour.
-        The module is used when `:raft_fleet` needs to construct a `t:RaftedValue.Config.t/0`.
-        To be more precise, it's used
-          1. in `RaftFleet.add_consensus_group/1`, or
-          2. when restoring `RaftFleet.Cluster` and the other consensus groups from log & snapshot files.
-      - Defaults to `nil`, which means that
-          1. `RaftFleet.add_consensus_group/1` cannot be used (you must use `RaftFleet.add_consensus_group/3` instead), and
-          2. when restoring from log & snapshot files, some of consensus groups may not be restored.
-      - Note that you can customize the `t:RaftedValue.Config.t/0` used by the `RaftFleet.Cluster` consensus group.
-        If you are not interested in customizing that value, you can use `RaftFleet.Cluster.default_rv_config/0`
-        in your callback module.
 
   Note that each raft_fleet process uses application configs stored in the local node.
   If you want to configure the options above you must set them on all nodes in your cluster.

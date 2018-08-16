@@ -177,6 +177,8 @@ defmodule RaftFleet.Cluster do
             case ret do
               {:error, _}  -> nil
               {:ok, nodes} ->
+                # If it's currently restoring from logs & snapshot files, consensus groups are started
+                # at the last by `on_restored_from_files/1` (to avoid confusion due to already removed groups).
                 restoring? = Process.get(:rafted_value_restoring, false)
                 if not restoring? do
                   Manager.start_consensus_group_members(group_name, rv_config, nodes)

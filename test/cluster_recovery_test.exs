@@ -42,7 +42,7 @@ defmodule RaftFleet.ClusterRecoveryTest do
     :ok = Application.stop(:raft_fleet)
   end
 
-  test "" do
+  test "recovery from files should restore all previously existed consensus groups" do
     start_activate_stop(fn ->
       :ok
     end)
@@ -51,14 +51,14 @@ defmodule RaftFleet.ClusterRecoveryTest do
       assert RaftFleet.consensus_groups == %{}
       assert Supervisor.which_children(ConsensusMemberSup) == []
       assert RaftFleet.add_consensus_group(:c1) == :ok
-      [pid] = Supervisor.which_children(ConsensusMemberSup) |> Enum.map(fn {_, p, _, _} -> p end)
+      [{_, pid, _, _}] = Supervisor.which_children(ConsensusMemberSup)
       assert Process.info(pid)[:registered_name] == :c1
     end)
     refute Process.whereis(:c1)
 
     start_activate_stop(fn ->
       assert RaftFleet.consensus_groups() == %{c1: 3}
-      [pid] = Supervisor.which_children(ConsensusMemberSup) |> Enum.map(fn {_, p, _, _} -> p end)
+      [{_, pid, _, _}] = Supervisor.which_children(ConsensusMemberSup)
       assert Process.info(pid)[:registered_name] == :c1
       :ok = RaftFleet.remove_consensus_group(:c1)
     end)
