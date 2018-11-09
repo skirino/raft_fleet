@@ -39,15 +39,18 @@ defmodule RaftFleet.ProcessAndDiskLogIndexInspector do
   end
 
   defun find_node_having_latest_log_index(name :: atom) :: {:ok, nil | node} | {:error, :process_exists} do
-    nodes = RaftFleet.active_nodes() |> Enum.flat_map(fn {_, ns} -> ns end)
-    {node_result_pairs, _bad_nodes} = GenServer.multi_call(nodes, __MODULE__, {:get_log_index, name}, 2000)
-    if Enum.any?(node_result_pairs, &match?({_node, {:error, :process_exists}}, &1)) do
-      {:error, :process_exists}
-    else
-      Enum.map(node_result_pairs, fn {n, {:ok, i}} -> {n, i} end)
-      |> Enum.reject(&match?({_node, nil}, &1))
-      |> find_most_preferable_node()
-      |> R.pure()
+    case RaftFleet.active_nodes() |> Enum.flat_map(fn {_, ns} -> ns end) do
+      [n] when n -> {:ok, n}
+      nodes      ->
+        {node_result_pairs, _bad_nodes} = GenServer.multi_call(nodes, __MODULE__, {:get_log_index, name}, 2000)
+        if Enum.any?(node_result_pairs, &match?({_node, {:error, :process_exists}}, &1)) do
+          {:error, :process_exists}
+        else
+          Enum.map(node_result_pairs, fn {n, {:ok, i}} -> {n, i} end)
+          |> Enum.reject(&match?({_node, nil}, &1))
+          |> find_most_preferable_node()
+          |> R.pure()
+        end
     end
   end
 
