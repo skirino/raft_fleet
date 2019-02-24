@@ -5,17 +5,18 @@ defmodule RaftFleet.Mixfile do
 
   def project() do
     [
-      app:             :raft_fleet,
-      version:         "0.9.2",
-      elixir:          "~> 1.6",
-      build_embedded:  Mix.env() == :prod,
-      start_permanent: Mix.env() == :prod,
-      deps:            deps(),
-      description:     "A fleet of Raft consensus groups",
-      package:         package(),
-      source_url:      @github_url,
-      homepage_url:    @github_url,
-      test_coverage:   [tool: Coverex.Task, coveralls: true],
+      app:               :raft_fleet,
+      version:           "0.9.2",
+      elixir:            "~> 1.6",
+      build_embedded:    Mix.env() == :prod,
+      start_permanent:   Mix.env() == :prod,
+      deps:              deps(),
+      description:       "A fleet of Raft consensus groups",
+      package:           package(),
+      source_url:        @github_url,
+      homepage_url:      @github_url,
+      test_coverage:     [tool: ExCoveralls],
+      preferred_cli_env: [coveralls: :test, "coveralls.detail": :test, "coveralls.post": :test, "coveralls.html": :test],
     ]
   end
 
@@ -30,9 +31,9 @@ defmodule RaftFleet.Mixfile do
     [
       {:croma       , "~> 0.9"},
       {:rafted_value, "~> 0.9"},
-      {:coverex     , "~> 1.4"   , only: :test},
-      {:dialyxir    , "~> 0.5"   , only: :dev },
-      {:ex_doc      , "~> 0.18.0", only: :dev },
+      {:dialyxir    , "~> 0.5"   , [only: :dev ]},
+      {:ex_doc      , "~> 0.18.0", [only: :dev ]},
+      {:excoveralls , "~> 0.10"  , [only: :test]},
     ]
   end
 
