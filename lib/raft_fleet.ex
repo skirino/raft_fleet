@@ -43,8 +43,11 @@ defmodule RaftFleet do
   `zone` is used to determine which nodes to replicate data:
   `RaftFleet` tries to place members of each consensus group across multiple zones for maximum availability.
 
-  Node activation by calling this function should be done after the node is fully connected to the other existing nodes;
-  otherwise there is a possibility (although it is small) that the cluster forms partitioned subset of active nodes.
+  Node activation by calling this function should be done after the node is
+  fully connected to the other existing nodes;
+  otherwise there is a possibility that the current node, without noticing other
+  active nodes in the cluster, initiates a new 1-member cluster instead of joining
+  the already initiated cluster.
   """
   defun activate(zone :: ZoneId.t) :: :ok | {:error, :not_inactive} do
     GenServer.call(Manager, {:activate, zone})
