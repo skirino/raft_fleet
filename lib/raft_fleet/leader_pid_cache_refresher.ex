@@ -45,9 +45,10 @@ defmodule RaftFleet.LeaderPidCacheRefresher do
   defp confirm_leader_or_find(name, nodes) do
     with pid when is_pid(pid)   <- LeaderPidCache.get(name),
          true                   <- MapSet.member?(nodes, node(pid)),
-         %{state_name: :leader} <- Util.try_status(pid),
-      do: :ok
+         %{state_name: :leader} <- Util.try_status(pid) do
+      :ok
     else
       _ -> Util.find_leader_and_cache(name)
+    end
   end
 end
