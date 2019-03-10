@@ -17,6 +17,7 @@ defmodule RaftFleet.Mixfile do
       homepage_url:      @github_url,
       test_coverage:     [tool: ExCoveralls],
       preferred_cli_env: [coveralls: :test, "coveralls.detail": :test, "coveralls.post": :test, "coveralls.html": :test],
+      dialyzer:          [ignore_warnings: ".dialyzer_ignore.exs"],
     ]
   end
 
@@ -31,9 +32,9 @@ defmodule RaftFleet.Mixfile do
     [
       {:croma       , "~> 0.9"},
       {:rafted_value, "~> 0.9"},
-      {:dialyxir    , "~> 0.5"   , [only: :dev ]},
-      {:ex_doc      , "~> 0.18.0", [only: :dev ]},
-      {:excoveralls , "~> 0.10"  , [only: :test]},
+      {:dialyxir    , "~> 1.0.0-rc4", [only: :dev ]},
+      {:ex_doc      , "~> 0.18.0"   , [only: :dev ]},
+      {:excoveralls , "~> 0.10"     , [only: :test]},
     ]
   end
 
