@@ -59,16 +59,17 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
   end
 
   defp adjust_consensus_member_sets(participating_nodes, groups) do
-    Enum.each(groups, fn group -> do_adjust(participating_nodes, group) end)
+    Enum.each(groups, fn pair -> do_adjust(participating_nodes, pair) end)
   end
 
-  defp do_adjust(_, {_, []}), do: []
+  defp do_adjust(_, {_, []}), do: :ok
   defp do_adjust(participating_nodes, {group_name, desired_member_nodes}) do
+    # delegate to a defpt function for testing
     adjust_one_step(participating_nodes, group_name, desired_member_nodes)
   end
 
   defpt adjust_one_step(participating_nodes, group_name, [leader_node | _] = desired_member_nodes) do
-    # Note: `leader_node == Node.self()` always holds, as this node is supposed to host leader process of this `group_name`
+    debug_assert(leader_node == Node.self(), "this node is supposed to host leader process of this group")
     case try_status(group_name) do
       %{state_name: :leader, from: leader, members: members, unresponsive_followers: unresponsive_followers} ->
         adjust_with_desired_leader(group_name, desired_member_nodes, leader, members, unresponsive_followers)

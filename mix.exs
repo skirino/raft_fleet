@@ -30,7 +30,7 @@ defmodule RaftFleet.Mixfile do
 
   defp deps() do
     [
-      {:croma       , "~> 0.9"},
+      {:croma       , "~> 0.10"},
       {:rafted_value, "~> 0.9"},
       {:dialyxir    , "~> 1.0.0-rc4", [only: :dev ]},
       {:ex_doc      , "~> 0.18.0"   , [only: :dev ]},
