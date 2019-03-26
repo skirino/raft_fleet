@@ -4,7 +4,7 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
   require Logger
   alias RaftFleet.{Cluster, Manager, LeaderPidCache}
 
-  # Currently this is fixed; simply I don't know whether this should be customizable or not.
+  # Currently this is a constant; I don't know whether this should be customizable or not.
   @wait_time_before_forgetting_deactivated_node 30 * 60_000
 
   def adjust() do
@@ -14,13 +14,31 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
       {:ok, {participating_nodes, groups, removed_groups}} ->
         kill_members_of_removed_groups(removed_groups)
         adjust_consensus_member_sets(participating_nodes, groups)
-        leader_pid = LeaderPidCache.get(Cluster)
-        if is_pid(leader_pid) and node(leader_pid) == Node.self() do
-          adjust_cluster_consensus_members(leader_pid, participating_nodes)
-        end
+        remove_extra_members_in_cluster_consensus_if_leader_resides_in_this_node(participating_nodes)
     end
   end
 
+  #
+  # Common utilities
+  #
+  defp try_status(dest) do
+    try do
+      RaftedValue.status(dest)
+    catch
+      :exit, {reason, _} -> reason # :noproc | {:nodedown, node} | :timeout
+    end
+  end
+
+  defp relevant_node_set(participating_nodes) do
+    # We need to take both of the following types of nodes into account to correctly find all member processes:
+    # - participating (active) nodes, which may not be connected due to temporary netsplit
+    # - currently connected nodes, which may already be deactivated but may still have member processes
+    Enum.into(participating_nodes, MapSet.new(Node.list()))
+  end
+
+  #
+  # Kill processes of already-removed consensus groups
+  #
   defp kill_members_of_removed_groups({removed_groups, index}) do
     Enum.each(removed_groups, &stop_members_of_removed_group/1)
     notify_completion_of_cleanup(index)
@@ -58,6 +76,9 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
     end)
   end
 
+  #
+  # Adjust (add, remove, rebalance) member processes of existing consensus groups
+  #
   defp adjust_consensus_member_sets(participating_nodes, groups) do
     Enum.each(groups, fn pair -> do_adjust(participating_nodes, pair) end)
   end
@@ -86,13 +107,6 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
             adjust_with_no_leader(group_name, relevant_nodes, node_with_status_pairs, noproc_nodes)
         end
     end
-  end
-
-  defp relevant_node_set(participating_nodes) do
-    # We need to take both of the following types of nodes into account to correctly find all member processes:
-    # - participating (active) nodes, which may not be connected due to temporary netsplit
-    # - currently connected nodes, which may already be deactivated but may still have member processes
-    Enum.into(participating_nodes, MapSet.new(Node.list()))
   end
 
   defp adjust_with_desired_leader(group_name,
@@ -155,14 +169,6 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
       else
         force_remove_member_in_irrelevant_node(group_name, members_in_relevant_nodes, Enum.random(members_in_irrelevant_nodes))
       end
-    end
-  end
-
-  defp try_status(dest) do
-    try do
-      RaftedValue.status(dest)
-    catch
-      :exit, {reason, _} -> reason # :noproc | {:nodedown, node} | :timeout
     end
   end
 
@@ -237,7 +243,17 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
     end
   end
 
-  defp adjust_cluster_consensus_members(leader_pid, participating_nodes) do
+  #
+  # Adjust member processes in `RaftFleet.Cluster` consensus group
+  #
+  defp remove_extra_members_in_cluster_consensus_if_leader_resides_in_this_node(participating_nodes) do
+    leader_pid = LeaderPidCache.get(Cluster)
+    if is_pid(leader_pid) and node(leader_pid) == Node.self() do
+      remove_extra_members_in_cluster_consensus(leader_pid, participating_nodes)
+    end
+  end
+
+  defp remove_extra_members_in_cluster_consensus(leader_pid, participating_nodes) do
     case RaftedValue.status(leader_pid) do
       %{unresponsive_followers: []} -> :ok
       %{members: member_pids, unresponsive_followers: unresponsive_pids} ->
