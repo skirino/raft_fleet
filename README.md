@@ -12,20 +12,21 @@ Elixir library to run multiple [Raft](https://raft.github.io/) consensus groups 
 ## Feature & Design
 
 - Easy hosting of multiple "cluster-wide state"s
-- Reasonably scalable placement of processes for multiple Raft consensus groups
-    - consensus member processes are distributed to ErlangVMs in a data center-aware manner using [rendezvous hashing](https://en.wikipedia.org/wiki/Rendezvous_hashing)
-    - automatic rebalancing on adding/removing nodes
-- Each consensus group leader is accessible using the name of the consensus group (which must be an atom)
-    - Actual pids of consensus leader processes are cached in a local ETS table for fast access
-- Flexible data model (defined by [rafted_value](https://github.com/skirino/rafted_value))
+    - Flexible data model (defined by [rafted_value](https://github.com/skirino/rafted_value))
 - Decentralized architecture and fault tolerance
+- Reasonably scalable placement of processes for multiple Raft consensus groups
+    - Consensus member processes are distributed to ErlangVMs in a data center-aware manner using [rendezvous hashing](https://en.wikipedia.org/wiki/Rendezvous_hashing)
+    - Automatic rebalancing on adding/removing nodes
+- Location transparency
+    - Each consensus group leader is accessible using name (an atom) of the consensus group
+    - Actual pids of consensus leader processes are cached in a local ETS table for fast access
 
 ## Notes on backward compatibility
 
 - Users of `<= 0.6.0` should upgrade to `0.6.1` before upgrading to `0.7.x` due to a change in internal data structure.
   While `<= 0.6.0` and `0.7.x` are not compatible, `0.6.1` should be able to interact with both `<= 0.6.0` and `0.7.x`.
 
-## Example
+## Usage example
 
 Suppose we have a cluster of 4 erlang nodes:
 
@@ -97,29 +98,24 @@ Activating/deactivating a node in the cluster triggers rebalancing of consensus 
 
 To run `raft_fleet` within an ErlangVM cluster, the followings are our general recommendations.
 
-Cluster should consist of at least 3 nodes to tolerate 1 node failure.
-Similarly cluster nodes should span 3 (or more) data centers, so that the system keeps on functioning in the face of 1 data center failure.
+- Cluster should consist of at least 3 nodes to tolerate 1 node failure.
+  Similarly cluster nodes should span 3 (or more) data centers, so that the system keeps on functioning in the face of 1 data center failure.
+- When you add new ErlangVM nodes, each node should run the following initialization steps:
+    1. establish connections to other running nodes,
+    2. call `RaftFleet.activate/1`.
 
-When you add new ErlangVM nodes, each node should run the following initialization steps:
-
-1. establish connections to other running nodes,
-2. call `RaftFleet.activate/1`.
-
-These steps are typically done within `start/2` of the main OTP application.
-Information of other running nodes should be available from e.g. IaaS API.
-
-When terminating a node you should proceed as follows
-(although `raft_fleet` tolerates failures that don't break quorums,
-it's much better to tell `raft_fleet` to make preparations beforehand):
-
-1. call `RaftFleet.deactivate/0` within the node-to-be-terminated,
-2. wait for a while (say, 10 min) so that existing consensus group members are migrated to the other nodes, then
-3. finally shutdown the node.
+  These steps are typically done within `start/2` of the main OTP application.
+  Information of other running nodes should be available from e.g. IaaS API.
+- When terminating a node you should proceed as follows
+  (although `raft_fleet` tolerates failures as long as quorums are maintained,
+  it's much better to tell `raft_fleet` to make preparations beforehand):
+    1. call `RaftFleet.deactivate/0` within the node-to-be-terminated,
+    2. wait for a while (say, 10 min) so that existing consensus group members are migrated to the other nodes, then
+    3. finally shutdown the node.
 
 ## Links
 
 - [Raft official website](https://raft.github.io/)
-- [The original paper](http://ramcloud.stanford.edu/raft.pdf)
-- [The thesis](https://ramcloud.stanford.edu/~ongaro/thesis.pdf)
-- [`rafted_value`](https://github.com/skirino/rafted_value) : Elixir implementation of the Raft consensus algorithm
+- [The original paper](http://ramcloud.stanford.edu/raft.pdf) and [the thesis](https://ramcloud.stanford.edu/~ongaro/thesis.pdf) about the Raft protocol
+- [`rafted_value`](https://github.com/skirino/rafted_value) : Elixir implementation of the Raft consensus protocol
 - [My slides to introduce rafted_value and raft_fleet](https://skirino.github.io/slides/raft_fleet.html#/)
