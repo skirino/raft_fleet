@@ -32,7 +32,7 @@ defmodule RaftFleet.Mixfile do
     [
       {:croma       , "~> 0.10"},
       {:rafted_value, "~> 0.9"},
-      {:dialyxir    , "~> 1.0.0-rc4", [only: :dev ]},
+      {:dialyxir    , "~> 1.0.0-rc6", [only: :dev ]},
       {:ex_doc      , "~> 0.18.0"   , [only: :dev ]},
       {:excoveralls , "~> 0.10"     , [only: :test]},
     ]
