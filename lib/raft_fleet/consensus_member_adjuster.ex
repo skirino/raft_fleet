@@ -69,10 +69,10 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
     end
   end
 
-  defp notify_completion_of_cleanup(index_or_group_name_or_nil) do
+  defp notify_completion_of_cleanup(index_or_nil) do
     spawn(fn ->
       millis = System.system_time(:millisecond)
-      RaftFleet.command(Cluster, {:stopped_extra_members, Node.self(), index_or_group_name_or_nil, millis, @wait_time_before_forgetting_deactivated_node})
+      RaftFleet.command(Cluster, {:stopped_extra_members, Node.self(), index_or_nil, millis, @wait_time_before_forgetting_deactivated_node})
     end)
   end
 

@@ -154,10 +154,10 @@ defmodule RaftFleet.Cluster do
       end
     end
 
-    def update_removed_groups(state0, node, index_or_group_name_or_nil, now, wait_time) do
+    def update_removed_groups(state0, node, index_or_nil, now, wait_time) do
       %__MODULE__{nodes_per_zone: npz,
                   recently_removed_groups: rrgs} = state = migrate_from_older_version(state0)
-      new_rrgs = RecentlyRemovedGroups.update(rrgs, npz, node, index_or_group_name_or_nil, now, wait_time)
+      new_rrgs = RecentlyRemovedGroups.update(rrgs, npz, node, index_or_nil, now, wait_time)
       %__MODULE__{state | recently_removed_groups: new_rrgs}
     end
   end
@@ -226,12 +226,12 @@ defmodule RaftFleet.Cluster do
 
   @impl true
   defun command(data :: t, arg :: RVData.command_arg) :: {RVData.command_ret, t} do
-    (data, {:add_group, group, n, _rv_config, _node}        ) -> State.add_group(data, group, n) # `rv_config` and `node` will be used in `Hook`
-    (data, {:remove_group, group}                           ) -> State.remove_group(data, group)
-    (data, {:add_node, node, zone}                          ) -> {:ok, State.add_node(data, node, zone)}
-    (data, {:remove_node, node}                             ) -> {:ok, State.remove_node(data, node)}
-    (data, {:stopped_extra_members, node, i_or_g, now, wait}) -> {:ok, State.update_removed_groups(data, node, i_or_g, now, wait)}
-    (data, _                                                ) -> {{:error, :invalid_command}, data} # For safety
+    (data, {:add_group, group, n, _rv_config, _node}   ) -> State.add_group(data, group, n) # `rv_config` and `node` will be used in `Hook`
+    (data, {:remove_group, group}                          ) -> State.remove_group(data, group)
+    (data, {:add_node, node, zone}                         ) -> {:ok, State.add_node(data, node, zone)}
+    (data, {:remove_node, node}                            ) -> {:ok, State.remove_node(data, node)}
+    (data, {:stopped_extra_members, node, index, now, wait}) -> {:ok, State.update_removed_groups(data, node, index, now, wait)}
+    (data, _                                               ) -> {{:error, :invalid_command}, data} # For safety
   end
 
   @impl true

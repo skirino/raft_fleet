@@ -7,7 +7,7 @@ defmodule RaftFleet.RecentlyRemovedGroups do
     defmodule Pair do
       use Croma.SubtypeOfTuple, elem_modules: [Croma.PosInteger, Croma.TypeGen.nilable(Croma.PosInteger)]
     end
-    use Croma.SubtypeOfMap, key_module: Croma.Atom, value_module: Croma.PosInteger
+    use Croma.SubtypeOfMap, key_module: Croma.Atom, value_module: Pair
   end
 
   defmodule IndexToGroupName do
@@ -66,16 +66,16 @@ defmodule RaftFleet.RecentlyRemovedGroups do
     end
   end
 
-  defun update(t                          :: t,
-               npz                        :: NodesPerZone.t,
-               node_from                  :: node,
-               index_or_group_name_or_nil :: nil | atom | pos_integer,
-               now                        :: pos_integer,
-               wait_time                  :: pos_integer) :: t do
+  defun update(t            :: t,
+               npz          :: NodesPerZone.t,
+               node_from    :: node,
+               index_or_nil :: nil | pos_integer,
+               now          :: pos_integer,
+               wait_time    :: pos_integer) :: t do
     t
     |> touch_currently_active_nodes(npz, now)
     |> forget_about_nodes_that_had_been_deactivated(now - wait_time)
-    |> set_node_index(node_from, index_or_group_name_or_nil)
+    |> set_node_index(node_from, index_or_nil)
     |> proceed_min_index()
   end
 
@@ -83,12 +83,12 @@ defmodule RaftFleet.RecentlyRemovedGroups do
     currently_active_nodes = Enum.flat_map(npz, fn {_z, ns} -> ns end)
     new_nodes =
       Enum.reduce(currently_active_nodes, nodes, fn(n, ns) ->
-        pair =
+        index_or_nil =
           case Map.get(ns, n) do
-            nil            -> {now, nil}
-            {_time, index} -> {now, index}
+            nil            -> nil
+            {_time, index} -> index
           end
-        Map.put(ns, n, pair)
+        Map.put(ns, n, {now, index_or_nil})
       end)
     %__MODULE__{t | active_nodes: new_nodes}
   end
@@ -98,16 +98,11 @@ defmodule RaftFleet.RecentlyRemovedGroups do
     %__MODULE__{t | active_nodes: new_nodes}
   end
 
-  defp set_node_index(%__MODULE__{active_nodes: nodes, group_to_indices: g2is} = t, node_from, index_or_group_name_or_nil) do
+  defp set_node_index(%__MODULE__{active_nodes: nodes} = t, node_from, index_or_nil) do
     new_nodes =
-      case index_or_group_name_or_nil do
+      case index_or_nil do
         nil                          -> nodes
         index when is_integer(index) -> update_node_index(nodes, node_from, index)
-        group when is_atom(group)    ->
-          case Map.get(g2is, group) do
-            [i | _] -> update_node_index(nodes, node_from, i)
-            _       -> nodes
-          end
       end
     %__MODULE__{t | active_nodes: new_nodes}
   end
