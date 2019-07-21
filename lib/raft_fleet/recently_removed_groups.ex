@@ -41,6 +41,13 @@ defmodule RaftFleet.RecentlyRemovedGroups do
     end
   end
 
+  defun cleanup_ongoing?(%__MODULE__{min_index: min, group_to_indices: g2is}, group :: atom) :: boolean do
+    Map.get(g2is, group, [])
+    |> Enum.any?(fn i -> min < i end)
+  end
+
+  # `cancel/2` is not used anymore; just kept here for backward compatibility (i.e. for hot code upgrade).
+  # Should be removed in a future release.
   defun cancel(%__MODULE__{index_to_group: i2g, group_to_indices: g2is} = t, group :: atom) :: t do
     {is, new_g2is} = Map.pop(g2is, group, [])
     new_i2g = Enum.reduce(is, i2g, fn(i, m) -> Map.delete(m, i) end)

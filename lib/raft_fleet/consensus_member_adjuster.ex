@@ -5,7 +5,7 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
   alias RaftFleet.{Cluster, Manager, LeaderPidCache}
 
   # Currently this is a constant; I don't know whether this should be customizable or not.
-  @wait_time_before_forgetting_deactivated_node 30 * 60_000
+  @wait_time_before_forgetting_deactivated_node (if Mix.env() == :test, do: 30_000, else: 30 * 60_000)
 
   def adjust() do
     case RaftFleet.query(Cluster, {:consensus_groups, Node.self()}) do
@@ -70,10 +70,27 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
   end
 
   defp notify_completion_of_cleanup(index_or_nil) do
-    spawn(fn ->
-      millis = System.system_time(:millisecond)
-      RaftFleet.command(Cluster, {:stopped_extra_members, Node.self(), index_or_nil, millis, @wait_time_before_forgetting_deactivated_node})
-    end)
+    case index_or_nil do
+      nil ->
+        # No cleanup task was given by `Cluster` but, to maintain cluster-wide bookkeeping information
+        # (i.e. to complete group cleanup on node failure), periodic command to `Cluster` is necessary.
+        # We assign this task to `ConsensusMemberAdjuster` process in the same node as the `Cluster` leader
+        # (when `Cluster` leader doesn't reside in this node the command fails),
+        # to reduce number of commands executed by `Cluster`.
+        spawn(fn ->
+          RaftedValue.command(Cluster, make_command_about_cleanup(nil))
+        end)
+      index ->
+        # We need to report back to `Cluster` about the cleanup.
+        spawn(fn ->
+          RaftFleet.command(Cluster, make_command_about_cleanup(index))
+        end)
+    end
+  end
+
+  defp make_command_about_cleanup(index_or_nil) do
+    millis = System.system_time(:millisecond)
+    {:stopped_extra_members, Node.self(), index_or_nil, millis, @wait_time_before_forgetting_deactivated_node}
   end
 
   #

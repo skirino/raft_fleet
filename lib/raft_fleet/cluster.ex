@@ -89,13 +89,16 @@ defmodule RaftFleet.Cluster do
         if Enum.empty?(nodes) do
           {{:error, :no_active_node}, state}
         else
-          new_groups   = Map.put(groups, group, n_replica)
-          new_rrgs     = RecentlyRemovedGroups.cancel(rrgs, group)
-          [leader | _] = member_nodes = NodesPerZone.lrw_members(nodes, group, n_replica)
-          pair         = {group, member_nodes}
-          new_members  = Map.update(members, leader, [pair], &[pair | &1])
-          new_state    = %__MODULE__{state | consensus_groups: new_groups, recently_removed_groups: new_rrgs, members_per_leader_node: new_members}
-          {{:ok, member_nodes}, new_state}
+          if RecentlyRemovedGroups.cleanup_ongoing?(rrgs, group) do
+            {{:error, :cleanup_ongoing}, state}
+          else
+            new_groups   = Map.put(groups, group, n_replica)
+            [leader | _] = member_nodes = NodesPerZone.lrw_members(nodes, group, n_replica)
+            pair         = {group, member_nodes}
+            new_members  = Map.update(members, leader, [pair], &[pair | &1])
+            new_state    = %__MODULE__{state | consensus_groups: new_groups, members_per_leader_node: new_members}
+            {{:ok, member_nodes}, new_state}
+          end
         end
       end
     end

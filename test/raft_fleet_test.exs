@@ -11,37 +11,37 @@ defmodule RaftFleetTest do
     election_timeout: 2500, # In travis disk I/O is sometimes rather slow, resulting in more frequent leader elections
   ])
 
-  test "add_consensus_group/3 right after remove_consensus_group/1 should return {:error, :process_exists} and should not do anything" do
+  test "add_consensus_group/3 right after remove_consensus_group/1 should return {:error, :cleanup_ongoing} and should not do anything" do
     with_active_nodes([Node.self()], &zone(&1, 1), fn ->
-      Enum.each(1 .. 10, fn i ->
-        name = :"consensus#{i}"
+      names = Enum.map(1 .. 10, fn i -> :"consensus#{i}" end)
+      Enum.each(names, fn name ->
         assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
         assert RaftFleet.consensus_groups()                       == %{name => 3}
         assert RaftFleet.remove_consensus_group(name)             == :ok
+        assert RaftFleet.add_consensus_group(name, 3, @rv_config) == {:error, :cleanup_ongoing}
         assert RaftFleet.consensus_groups()                       == %{}
-        case RaftFleet.add_consensus_group(name, 3, @rv_config) do
-          :ok -> # on rare occasion member process is terminated by adjuster process
-            assert RaftFleet.consensus_groups()           == %{name => 3}
-            assert RaftFleet.remove_consensus_group(name) == :ok
-            assert RaftFleet.consensus_groups()           == %{}
-          {:error, :process_exists} -> # matches this pattern most of the time
-            assert RaftFleet.consensus_groups() == %{}
-        end
+      end)
+      :timer.sleep(10_000) # Wait for a while for cleanup
+      Enum.each(names, fn name ->
+        assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok # Now OK to add group with the same name
+        assert RaftFleet.consensus_groups()                       == %{name => 3}
+        assert RaftFleet.remove_consensus_group(name)             == :ok
+        assert RaftFleet.consensus_groups()                       == %{}
       end)
     end)
   end
 
   test "repeatedly calling remove_consensus_group/1 should eventually remove processes for target consensus groups" do
     with_active_nodes([Node.self()], &zone(&1, 1), fn ->
-      names = Enum.map(1 .. 300, fn i -> :"consensus#{i}" end)
+      names = Enum.map(1 .. 100, fn i -> :"consensus#{i}" end)
       Enum.each(names, fn name ->
-        :ok = RaftFleet.add_consensus_group(name, 3, @rv_config)
+        assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
       end)
       Enum.each(names, fn name ->
         assert is_pid(Process.whereis(name))
       end)
       Enum.each(names, fn name ->
-        :ok = RaftFleet.remove_consensus_group(name)
+        assert RaftFleet.remove_consensus_group(name) == :ok
       end)
       # Wait for at least 1 interval of adjuster
       :timer.sleep(5000)
@@ -49,6 +49,24 @@ defmodule RaftFleetTest do
         assert is_nil(Process.whereis(name))
       end)
     end)
+  end
+
+  test "cleanup of a removed group should make progress by detecting node failure" do
+    name = :consensus1
+    start_slave(:"2")
+    start_slave(:"3")
+    [n2, n3] = Node.list()
+    with_active_nodes([Node.self(), n2], &zone(&1, 1), fn ->
+      activate_node(n3, &zone(&1, 1))
+      assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
+      wait_until_members_fully_migrate(name)
+      stop_slave(:"3")
+      assert RaftFleet.remove_consensus_group(name) == :ok
+      assert RaftFleet.add_consensus_group(name, 3, @rv_config) == {:error, :cleanup_ongoing}
+      :timer.sleep(70_000) # node_purge_failure_time_window + wait_time_before_forgetting + margin
+      assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
+    end)
+    stop_slave(:"2")
   end
 
   defp start_consensus_group(name) do
@@ -456,6 +474,7 @@ defmodule RaftFleetTest do
         pids = RaftedValue.status({name, leader_node}).members
         assert RaftFleet.remove_consensus_group(name) == :ok
         Enum.each(pids, &monitor_wait/1)
+        :timer.sleep(1_000)
 
         assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
         _ = wait_until_members_fully_migrate(name)
@@ -465,10 +484,12 @@ defmodule RaftFleetTest do
     end)
   end
 
-  defp monitor_wait(pid) do
+  defp monitor_wait(pid, timeout \\ :infinity) do
     ref = Process.monitor(pid)
     receive do
       {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
+    after
+      timeout -> raise "pid #{inspect(pid)} doesn't stop!"
     end
   end
 

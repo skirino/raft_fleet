@@ -83,7 +83,7 @@ defmodule RaftFleet do
   - `n_replica` is filled with `3` (fixed value) and
   - `rv_config` is computed using the module given as `:rafted_value_config_maker` option (see also `RaftFleet.Config`).
   """
-  defun add_consensus_group(name :: g[atom]) :: :ok | {:error, :already_added | :no_leader | any} do
+  defun add_consensus_group(name :: g[atom]) :: :ok | {:error, :already_added | :cleanup_ongoing | :no_leader | any} do
     case RaftFleet.Config.rafted_value_config_maker() do
       nil -> raise "No module is specified as `:rafted_value_config_maker` option!"
       mod -> add_consensus_group(name, 3, mod.make(name))
@@ -108,7 +108,7 @@ defmodule RaftFleet do
   defun add_consensus_group(name          :: g[atom],
                             n_replica     :: g[pos_integer],
                             rv_config     =  %RaftedValue.Config{},
-                            await_timeout :: g[pos_integer] \\ 5_000) :: :ok | {:error, :already_added | :no_leader | any} do
+                            await_timeout :: g[pos_integer] \\ 5_000) :: :ok | {:error, :already_added | :cleanup_ongoing | :no_leader | any} do
     ref = make_ref()
     call_with_retry(Cluster, @default_retry + 1, @default_retry_interval, fn pid ->
       leader_node = node(pid)
@@ -127,9 +127,9 @@ defmodule RaftFleet do
             {:ok, {:leader_delegated_to, delegated_node}} ->
               {:ok, :leader_started} = GenServer.call({Manager, delegated_node}, msg, await_timeout)
               :ok
-            {:error, :process_exists} = e ->
+            {:error, :process_exists} ->
               remove_consensus_group(name) # rollback the newly-added consensus group
-              e
+              {:error, :cleanup_ongoing}
           end
         catch
           :exit, reason -> {:error, reason}
