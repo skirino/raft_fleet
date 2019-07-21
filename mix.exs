@@ -6,8 +6,8 @@ defmodule RaftFleet.Mixfile do
   def project() do
     [
       app:               :raft_fleet,
-      version:           "0.9.2",
-      elixir:            "~> 1.6",
+      version:           "0.10.0",
+      elixir:            "~> 1.7",
       build_embedded:    Mix.env() == :prod,
       start_permanent:   Mix.env() == :prod,
       deps:              deps(),
@@ -33,7 +33,7 @@ defmodule RaftFleet.Mixfile do
       {:croma       , "~> 0.10"},
       {:rafted_value, "~> 0.9"},
       {:dialyxir    , "~> 1.0.0-rc6", [only: :dev ]},
-      {:ex_doc      , "~> 0.18.0"   , [only: :dev ]},
+      {:ex_doc      , "~> 0.20"     , [only: :dev ]},
       {:excoveralls , "~> 0.10"     , [only: :test]},
     ]
   end
