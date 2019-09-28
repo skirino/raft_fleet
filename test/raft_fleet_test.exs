@@ -18,8 +18,11 @@ defmodule RaftFleetTest do
         assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
         assert RaftFleet.consensus_groups()                       == %{name => 3}
         assert RaftFleet.remove_consensus_group(name)             == :ok
-        assert RaftFleet.add_consensus_group(name, 3, @rv_config) == {:error, :cleanup_ongoing}
-        assert RaftFleet.consensus_groups()                       == %{}
+        case RaftFleet.add_consensus_group(name, 3, @rv_config) do
+          {:error, :cleanup_ongoing} -> :ok # matches this branch most of the time
+          :ok                        -> assert RaftFleet.remove_consensus_group(name) == :ok
+        end
+        assert RaftFleet.consensus_groups() == %{}
       end)
       :timer.sleep(10_000) # Wait for a while for cleanup
       Enum.each(names, fn name ->
@@ -62,7 +65,10 @@ defmodule RaftFleetTest do
       wait_until_members_fully_migrate(name)
       stop_slave(:"3")
       assert RaftFleet.remove_consensus_group(name) == :ok
-      assert RaftFleet.add_consensus_group(name, 3, @rv_config) == {:error, :cleanup_ongoing}
+      case RaftFleet.add_consensus_group(name, 3, @rv_config) do
+        {:error, :cleanup_ongoing} -> :ok # matches this branch most of the time
+        :ok                        -> assert RaftFleet.remove_consensus_group(name) == :ok
+      end
       :timer.sleep(70_000) # node_purge_failure_time_window + wait_time_before_forgetting + margin
       assert RaftFleet.add_consensus_group(name, 3, @rv_config) == :ok
     end)
