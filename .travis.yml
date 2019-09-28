@@ -7,8 +7,8 @@ matrix:
       otp_release: 21.3.8.1
     - elixir: 1.8.2
       otp_release: 22.0.7
-    - elixir: 1.9.0
+    - elixir: 1.9.1
       otp_release: 21.3.8.1
-    - elixir: 1.9.0
+    - elixir: 1.9.1
       otp_release: 22.0.7
 script: "epmd -daemon && MIX_ENV=test mix do deps.get, deps.compile, test --cover"

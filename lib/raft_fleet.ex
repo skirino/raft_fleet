@@ -48,6 +48,11 @@ defmodule RaftFleet do
   otherwise there is a possibility that the current node, without noticing other
   active nodes in the cluster, initiates a new 1-member cluster instead of joining
   the already initiated cluster.
+
+  Note also that, before calling this function, it is necessary to load and start
+  OTP applications that are required by consensus group implementations.
+  Specifically, `:data_module`s and `:communication_module`s specified by consensus group
+  configurations must be available.
   """
   defun activate(zone :: ZoneId.t) :: :ok | {:error, :not_inactive} do
     GenServer.call(Manager, {:activate, zone})
