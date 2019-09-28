@@ -44,12 +44,12 @@ defmodule RaftFleet do
   `RaftFleet` tries to place members of each consensus group across multiple zones for maximum availability.
 
   Node activation by calling this function should be done after the node is
-  fully connected to the other existing nodes;
-  otherwise there is a possibility that the current node, without noticing other
+  fully connected to the other existing nodes.
+  Otherwise there is a possibility that the current node, without noticing other
   active nodes in the cluster, initiates a new 1-member cluster instead of joining
   the already initiated cluster.
 
-  Note also that, before calling this function, it is necessary to load and start
+  Note that, before calling this function, it is necessary to load and start
   OTP applications that are required by consensus group implementations.
   Specifically, `:data_module`s and `:communication_module`s specified by consensus group
   configurations must be available.
