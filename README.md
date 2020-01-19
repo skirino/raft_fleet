@@ -116,6 +116,7 @@ To run `raft_fleet` within an ErlangVM cluster, the followings are our general r
 ## Links
 
 - [Raft official website](https://raft.github.io/)
-- [The original paper](http://ramcloud.stanford.edu/raft.pdf) and [the thesis](https://ramcloud.stanford.edu/~ongaro/thesis.pdf) about the Raft protocol
+- [The original paper](https://raft.github.io/raft.pdf) and
+  [the thesis](https://github.com/ongardie/dissertation#readme) about the Raft protocol
 - [`rafted_value`](https://github.com/skirino/rafted_value) : Elixir implementation of the Raft consensus protocol
-- [My slides to introduce rafted_value and raft_fleet](https://skirino.github.io/slides/raft_fleet.html#/)
+- [skirino's slides to introduce rafted_value and raft_fleet](https://skirino.github.io/slides/raft_fleet.html#/)
