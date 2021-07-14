@@ -1,14 +1,34 @@
 language: elixir
 matrix:
   include:
-    - elixir: 1.7.4
-      otp_release: 20.3.8.5
-    - elixir: 1.8.2
-      otp_release: 21.3.8.1
-    - elixir: 1.8.2
-      otp_release: 22.0.7
-    - elixir: 1.9.1
-      otp_release: 21.3.8.1
-    - elixir: 1.9.1
-      otp_release: 22.0.7
+    - elixir: 1.7
+      otp_release: 21.3
+    - elixir: 1.8
+      otp_release: 21.3
+    - elixir: 1.9
+      otp_release: 21.3
+    - elixir: 1.9
+      otp_release: 22.3
+    - elixir: 1.10
+      otp_release: 21.3
+    - elixir: 1.10
+      otp_release: 22.3
+    - elixir: 1.10
+      otp_release: 23.0
+    - elixir: 1.11
+      otp_release: 21.3
+    - elixir: 1.11
+      otp_release: 22.3
+    - elixir: 1.11
+      otp_release: 23.0
+    - elixir: 1.11
+      otp_release: 24.0
+    - elixir: 1.12
+      otp_release: 21.3
+    - elixir: 1.12
+      otp_release: 22.3
+    - elixir: 1.12
+      otp_release: 23.0
+    - elixir: 1.12
+      otp_release: 24.0
 script: "epmd -daemon && MIX_ENV=test mix do deps.get, deps.compile, test --cover"
