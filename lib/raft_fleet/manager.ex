@@ -40,8 +40,11 @@ defmodule RaftFleet.Manager do
       end
     end
 
-    defp gen_server_from?({p, r}) when is_pid(p) and is_reference(r), do: true
+    defp gen_server_from?({p, r}) when is_pid(p), do: is_ref_or_alias_ref(r)
     defp gen_server_from?(_), do: false
+
+    defp is_ref_or_alias_ref([:alias | r]), do: is_reference(r)
+    defp is_ref_or_alias_ref(r), do: is_reference(r)
 
     defp convert_to_reply(:leader_started             ), do: {:ok, :leader_started}
     defp convert_to_reply({:leader_delegated_to, node}), do: {:ok, {:leader_delegated_to, node}}
