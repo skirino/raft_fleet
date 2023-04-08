@@ -6,7 +6,6 @@ Elixir library to run multiple [Raft](https://raft.github.io/) consensus groups 
 - [Hex package information](https://hex.pm/packages/raft_fleet)
 
 [![Hex.pm](http://img.shields.io/hexpm/v/raft_fleet.svg)](https://hex.pm/packages/raft_fleet)
-[![Build Status](https://travis-ci.com/skirino/raft_fleet.svg)](https://travis-ci.com/github/skirino/raft_fleet)
 [![Coverage Status](https://coveralls.io/repos/github/skirino/raft_fleet/badge.svg?branch=master)](https://coveralls.io/github/skirino/raft_fleet?branch=master)
 
 ## Feature & Design
