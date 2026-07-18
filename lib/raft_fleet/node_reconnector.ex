@@ -14,22 +14,22 @@ defmodule RaftFleet.NodeReconnector do
       unhealthy_since:    Croma.Map, # %{node => Monotonic.t}
     ]
 
-    defun this_node_activated(state :: t) :: t do
-      %__MODULE__{state | this_node_active?: true}
+    defun this_node_activated(%__MODULE__{} = state :: t) :: t do
+      %{state | this_node_active?: true}
     end
 
-    defun this_node_deactivated(state :: t) :: t do
-      %__MODULE__{state | this_node_active?: false}
+    defun this_node_deactivated(%__MODULE__{} = state :: t) :: t do
+      %{state | this_node_active?: false}
     end
 
     defun other_node_activated(%__MODULE__{other_active_nodes: nodes} = state :: t, node :: node) :: t do
       new_nodes = if node in nodes, do: nodes, else: [node | nodes]
-      %__MODULE__{state | other_active_nodes: new_nodes}
+      %{state | other_active_nodes: new_nodes}
     end
 
-    defun update_active_nodes(state :: t, nodes_per_zone :: NodesPerZone.t) :: t do
+    defun update_active_nodes(%__MODULE__{} = state :: t, nodes_per_zone :: NodesPerZone.t) :: t do
       all_nodes = Enum.flat_map(nodes_per_zone, fn {_z, ns} -> ns end)
-      %__MODULE__{state |
+      %{state |
         this_node_active?:  Node.self() in all_nodes,
         other_active_nodes: List.delete(all_nodes, Node.self()),
       }
@@ -52,7 +52,7 @@ defmodule RaftFleet.NodeReconnector do
               Map.put_new_lazy(m, n, &Monotonic.millis/0)
             end
           end)
-        %__MODULE__{state | unhealthy_since: map3}
+        %{state | unhealthy_since: map3}
       else
         state
       end
