@@ -10,7 +10,7 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
   def adjust() do
     case RaftFleet.query(Cluster, {:consensus_groups, Node.self()}) do
       {:error, reason} ->
-        Logger.warn("querying all consensus groups failed: #{inspect(reason)}")
+        Logger.warning("querying all consensus groups failed: #{inspect(reason)}")
       {:ok, {participating_nodes, groups, removed_groups}} ->
         kill_members_of_removed_groups(removed_groups)
         adjust_consensus_member_sets(participating_nodes, groups)
@@ -235,7 +235,7 @@ defmodule RaftFleet.ConsensusMemberAdjuster do
   end
 
   defp force_remove_a_member_from_existing_members_and_log(group_name, members, target_member, log_message) do
-    Logger.warn(log_message)
+    Logger.warning(log_message)
     Enum.each(members, fn m ->
       try do
         RaftedValue.force_remove_member(m, target_member)
