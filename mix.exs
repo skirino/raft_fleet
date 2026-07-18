@@ -5,25 +5,30 @@ defmodule RaftFleet.Mixfile do
 
   def project() do
     [
-      app:               :raft_fleet,
-      version:           "0.10.2",
-      elixir:            "~> 1.7",
-      build_embedded:    Mix.env() == :prod,
-      start_permanent:   Mix.env() == :prod,
-      deps:              deps(),
-      description:       "A fleet of Raft consensus groups",
-      package:           package(),
-      source_url:        @github_url,
-      homepage_url:      @github_url,
-      test_coverage:     [tool: ExCoveralls],
-      preferred_cli_env: [coveralls: :test, "coveralls.detail": :test, "coveralls.post": :test, "coveralls.html": :test],
-      dialyzer:          [ignore_warnings: ".dialyzer_ignore.exs"],
+      app:             :raft_fleet,
+      version:         "0.10.2",
+      elixir:          "~> 1.14",
+      build_embedded:  Mix.env() == :prod,
+      start_permanent: Mix.env() == :prod,
+      deps:            deps(),
+      description:     "A fleet of Raft consensus groups",
+      package:         package(),
+      source_url:      @github_url,
+      homepage_url:    @github_url,
+      test_coverage:   [tool: ExCoveralls],
+      dialyzer:        [ignore_warnings: ".dialyzer_ignore.exs"],
+    ]
+  end
+
+  def cli() do
+    [
+      preferred_envs: [coveralls: :test, "coveralls.detail": :test, "coveralls.post": :test, "coveralls.html": :test],
     ]
   end
 
   def application() do
     [
-      applications: [:croma, :rafted_value, :logger],
+      extra_applications: (if Mix.env() == :dev, do: [:mix], else: []) ++ [:logger],
       mod: {RaftFleet, []},
     ]
   end
