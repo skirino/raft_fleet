@@ -23,10 +23,10 @@ defmodule SlaveNode do
   end
 
   def start_slave(shortname, persist \\ :random) do
-    nodes_before = Node.list()
-    {:ok, hostname} = :inet.gethostname()
-    {:ok, longname} = :slave.start_link(hostname, shortname)
-    true            = :code.set_path(:code.get_path()) |> at(longname)
+    nodes_before          = Node.list()
+    {:ok, hostname}       = :inet.gethostname()
+    {:ok, _pid, longname} = :peer.start_link(%{host: hostname, name: shortname})
+    true                  = :code.set_path(:code.get_path()) |> at(longname)
     case persist do
       :random -> PersistenceSetting.randomly_pick_whether_to_persist(longname)
       :yes    -> PersistenceSetting.turn_on_persistence(longname)
@@ -39,7 +39,9 @@ defmodule SlaveNode do
   end
 
   def stop_slave(shortname) do
-    :ok = :slave.stop(shortname_to_longname(shortname))
+    # We should use `:peer.stop(peer_ref)` but we currently don't keep `peer_ref`.
+    # Instead forcibly halt the node using `:rpc.call`.
+    :rpc.call(shortname_to_longname(shortname), :erlang, :halt, [])
   end
 
   def shortname_to_longname(shortname) do
