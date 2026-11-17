@@ -106,6 +106,9 @@ defmodule RaftFleet do
   If you configure `raft_fleet` to persist Raft logs & snapshots (see also `RaftFleet.Config`)
   and the consensus group with `name` had been removed by `remove_consensus_group/1`,
   then `add_consensus_group/3` will restore the state of the consensus group from the snapshot and log files.
+  The 1st member is spawned in the node having the most up-to-date log files (compared by `{term, index}` of the last log entry).
+  Note that all committed log entries are restored only if the log files of a majority of the latest members are available
+  (i.e. the nodes are connected and active); this condition is not verified by raft_fleet.
 
   The caller is blocked until the newly spawned leader becomes ready.
   `await_timeout` specifies how many milliseconds to wait for the initialization.

@@ -7,12 +7,19 @@ defmodule RaftFleet.ProcessAndDiskLogIndexInspector do
   When starting a new consensus group, a manager process collects reports from all active nodes and determine where to spawn the 1st member process.
   The report includes:
   - whether there exists a process whose registered name equals to the consensus group name
-  - last log index in locally stored files (if any)
+  - term and index of the last log entry in locally stored files (if any)
+
+  The node whose log is the most up-to-date (compared by `{term, index}`, as in Raft's leader election) is chosen.
+  The chosen log is guaranteed to contain all committed entries only if the reports include a majority of
+  the members in the latest configuration of the consensus group.
+  Note that this condition is not verified here (we don't know the latest members),
+  i.e. restoring a consensus group from disk is done on a best-effort basis:
+  nodes that don't respond in time or don't have log files are simply ignored.
   """
 
   use GenServer
   alias Croma.Result, as: R
-  alias RaftedValue.LogIndex
+  alias RaftedValue.{TermNumber, LogIndex}
   alias RaftFleet.PerMemberOptions
 
   defun start_link([]) :: {:ok, pid} do
@@ -27,12 +34,12 @@ defmodule RaftFleet.ProcessAndDiskLogIndexInspector do
     {:reply, make_reply(name), nil}
   end
 
-  defunp make_reply(name :: atom) :: {:ok, nil | LogIndex.t} | {:error, :process_exists} do
+  defunp make_reply(name :: atom) :: {:ok, nil | {TermNumber.t, LogIndex.t}} | {:error, :process_exists} do
     case Process.whereis(name) do
       nil ->
         case PerMemberOptions.build(name) |> Keyword.get(:persistence_dir) do
           nil -> {:ok, nil}
-          dir -> {:ok, RaftedValue.read_last_log_index(dir)}
+          dir -> {:ok, RaftedValue.read_last_log_term_and_index(dir)}
         end
       _pid -> {:error, :process_exists}
     end
@@ -54,11 +61,21 @@ defmodule RaftFleet.ProcessAndDiskLogIndexInspector do
     end
   end
 
-  defunp find_most_preferable_node(pairs :: [{node, LogIndex.t}]) :: nil | node do
+  defunp find_most_preferable_node(pairs :: [{node, LogIndex.t | {TermNumber.t, LogIndex.t}}]) :: nil | node do
     case pairs do
       [] -> nil
       _  ->
-        Enum.reduce(pairs, fn(pair1, pair2) ->
+        # Nodes running older version of raft_fleet reply only with last log index (without term).
+        # In that case we fall back to comparing indices only.
+        if Enum.all?(pairs, &match?({_node, {_term, _index}}, &1)) do
+          pairs
+        else
+          Enum.map(pairs, fn
+            {n, {_term, i}} -> {n, i}
+            {n, i}          -> {n, i} # Msg returned from an older raft_fleet. This clause will be removed in a future version
+          end)
+        end
+        |> Enum.reduce(fn(pair1, pair2) ->
           if prefer_left?(pair1, pair2), do: pair1, else: pair2
         end)
         |> elem(0)
