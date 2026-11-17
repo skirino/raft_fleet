@@ -6,7 +6,7 @@ defmodule RaftFleet.Mixfile do
   def project() do
     [
       app:             :raft_fleet,
-      version:         "0.11.0",
+      version:         "0.12.0",
       elixir:          "~> 1.14",
       build_embedded:  Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
